@@ -3,10 +3,13 @@
   "outputDirectory": ".next",
   "framework": "nextjs",
   "functions": {
-    "api/**/*.py": {
-      "runtime": "python3.9",
-      "maxDuration": 60
-    }
+    "api/leads.py": { "maxDuration": 30 },
+    "api/jobs.py": { "maxDuration": 30 },
+    "api/stats.py": { "maxDuration": 30 },
+    "api/leads/export.py": { "maxDuration": 30 },
+    "api/leads/[id].py": { "maxDuration": 30 },
+    "api/jobs/[id].py": { "maxDuration": 30 },
+    "api/jobs/[id]/cancel.py": { "maxDuration": 30 }
   },
   "rewrites": [
     {
