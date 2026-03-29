@@ -1,0 +1,43 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "functions": {
+    "api/**/*.py": {
+      "runtime": "python3.9",
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/leads/export",
+      "destination": "/api/leads/export"
+    },
+    {
+      "source": "/api/leads/:id/cancel",
+      "destination": "/api/leads/[id]/cancel"
+    },
+    {
+      "source": "/api/leads/:id",
+      "destination": "/api/leads/[id]"
+    },
+    {
+      "source": "/api/jobs/:id/cancel",
+      "destination": "/api/jobs/[id]/cancel"
+    },
+    {
+      "source": "/api/jobs/:id",
+      "destination": "/api/jobs/[id]"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PATCH, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+      ]
+    }
+  ]
+}
