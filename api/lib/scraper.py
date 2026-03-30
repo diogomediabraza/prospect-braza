@@ -5,43 +5,83 @@ Runs synchronously within a Vercel serverless function with a timeout.
 import re
 import time
 import gzip as _gzip
+import zlib
 import urllib.request
 import urllib.parse
+import http.cookiejar
 from typing import Optional
 
 
-def fetch_url(url: str, timeout: int = 15) -> str:
-    """Fetch a URL with browser-like headers, handling gzip."""
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Accept": (
-                "text/html,application/xhtml+xml,application/xml;"
-                "q=0.9,image/avif,image/webp,*/*;q=0.8"
-            ),
-            "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.8",
-            "Accept-Encoding": "gzip, deflate",
-            "Connection": "keep-alive",
-        },
+def _make_opener():
+    """Create an opener with cookie support and browser-like headers."""
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(jar),
+        urllib.request.HTTPSHandler(),
     )
+    opener.addheaders = [
+        ("User-Agent", (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )),
+        ("Accept", (
+            "text/html,application/xhtml+xml,application/xml;"
+            "q=0.9,image/avif,image/webp,*/*;q=0.8"
+        )),
+        ("Accept-Language", "pt-PT,pt;q=0.9,en;q=0.8"),
+        ("Accept-Encoding", "gzip, deflate"),
+        ("Connection", "keep-alive"),
+        ("Upgrade-Insecure-Requests", "1"),
+        ("Cache-Control", "max-age=0"),
+    ]
+    return opener
+
+
+def _decompress(raw, encoding):
+    """Decompress response body."""
+    if "gzip" in encoding:
+        return _gzip.decompress(raw)
+    if "deflate" in encoding:
+        try:
+            return zlib.decompress(raw)
+        except zlib.error:
+            return zlib.decompress(raw, -zlib.MAX_WBITS)
+    return raw
+
+
+def fetch_url(url, timeout=15, opener=None):
+    """Fetch a URL using opener (with cookies), handling gzip/deflate."""
+    if opener is None:
+        opener = _make_opener()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
+        with opener.open(url, timeout=timeout) as response:
             raw = response.read()
             enc = response.headers.get("Content-Encoding", "")
-            if "gzip" in enc:
-                raw = _gzip.decompress(raw)
+            raw = _decompress(raw, enc)
             return raw.decode("utf-8", errors="replace")
     except Exception:
         return ""
 
 
-def extract_companies_pai(html: str, nicho: str, localidade: str) -> list[dict]:
-    """Extract company listings from pai.pt HTML."""
+def _warm_up_session(opener):
+    """Visit homepage first to establish session cookies."""
+    try:
+        with opener.open("https://www.pai.pt/", timeout=10) as r:
+            r.read()
+    except Exception:
+        pass
+
+
+def extract_companies_pai(html, nicho, localidade):
+    """
+    Extract company listings from pai.pt HTML.
+
+    pai.pt structure:
+      - Company names are in <h2> or <h3> headings that contain
+        an <a href="/paginas/{id}-{slug}"> link.
+      - Phone numbers appear as <a href="tel:XXXXXXXXX"> links.
+    """
     heading_pattern = re.compile(
         r'<h[23][^>]*>(?:[^<]|<(?!/h[23]))*?'
         r'href="/paginas/\d+[^"]*"[^>]*>\s*([^<]{3,100})\s*</a>',
@@ -52,42 +92,46 @@ def extract_companies_pai(html: str, nicho: str, localidade: str) -> list[dict]:
         re.IGNORECASE,
     )
     tel_pattern = re.compile(r'href="tel:(\+?351)?(\d{9})"')
+
     phones = [m.group(2) for m in tel_pattern.finditer(html)]
     names = [m.group(1).strip() for m in heading_pattern.finditer(html)]
+
     if not names:
-        seen_ids: set = set()
+        seen_ids = set()
         for m in link_pattern.finditer(html):
             pid = m.group(1)
             text = m.group(3).strip()
             if pid not in seen_ids and len(text) > 3:
                 seen_ids.add(pid)
                 names.append(text)
+
     if not names:
-        seen_slugs: set = set()
+        seen_slugs = set()
         for slug in re.findall(r'href="/paginas/\d+-([^"]+)"', html):
             if slug not in seen_slugs:
                 seen_slugs.add(slug)
                 names.append(slug.replace("-", " ").title())
+
     results = []
     for i, name in enumerate(names):
-        entry: dict = {"nome": name, "nicho": nicho, "localidade": localidade}
+        entry = {"nome": name, "nicho": nicho, "localidade": localidade}
         if i < len(phones):
             entry["telefone"] = phones[i]
         results.append(entry)
     return results
 
 
-def scrape_paginas_amarelas(
-    nicho: str,
-    localidade: str,
-    max_results: int = 50,
-) -> list[dict]:
-    """Scrape pai.pt for companies."""
-    results: list = []
+def scrape_paginas_amarelas(nicho, localidade, max_results=50):
+    """Scrape pai.pt for companies. Returns list of raw company dicts."""
+    opener = _make_opener()
+    _warm_up_session(opener)
+
+    results = []
     page = 1
     max_pages = max(1, (max_results + 9) // 10)
     nicho_enc = urllib.parse.quote(nicho)
     local_enc = urllib.parse.quote_plus(localidade)
+
     while len(results) < max_results and page <= max_pages:
         url = (
             "https://www.pai.pt/searches"
@@ -97,7 +141,7 @@ def scrape_paginas_amarelas(
             "&commit=Procurar"
             "&page=" + str(page)
         )
-        html = fetch_url(url)
+        html = fetch_url(url, opener=opener)
         if not html:
             break
         companies = extract_companies_pai(html, nicho, localidade)
@@ -106,8 +150,9 @@ def scrape_paginas_amarelas(
         results.extend(companies)
         page += 1
         time.sleep(0.5)
-    seen: set = set()
-    unique: list = []
+
+    seen = set()
+    unique = []
     for c in results:
         if c["nome"] not in seen:
             seen.add(c["nome"])
@@ -115,31 +160,46 @@ def scrape_paginas_amarelas(
     return unique[:max_results]
 
 
-def check_digital_presence(website) -> dict:
+def check_digital_presence(website):
     """Check basic digital presence for a company."""
     if not website:
-        return {"tem_website": False, "tem_loja_online": False, "tem_gtm": False,
-                "tem_ga4": False, "tem_pixel_meta": False, "tem_google_ads": False,
-                "tem_facebook_ads": False}
+        return {
+            "tem_website": False,
+            "tem_loja_online": False,
+            "tem_gtm": False,
+            "tem_ga4": False,
+            "tem_pixel_meta": False,
+            "tem_google_ads": False,
+            "tem_facebook_ads": False,
+        }
     url = website if website.startswith("http") else f"https://{website}"
     html = fetch_url(url, timeout=10)
     if not html:
-        return {"tem_website": True, "tem_loja_online": False, "tem_gtm": False,
-                "tem_ga4": False, "tem_pixel_meta": False, "tem_google_ads": False,
-                "tem_facebook_ads": False}
-    h = html.lower()
+        return {
+            "tem_website": True,
+            "tem_loja_online": False,
+            "tem_gtm": False,
+            "tem_ga4": False,
+            "tem_pixel_meta": False,
+            "tem_google_ads": False,
+            "tem_facebook_ads": False,
+        }
+    html_lower = html.lower()
     return {
         "tem_website": True,
-        "tem_loja_online": any(k in h for k in ["woocommerce","shopify","cart","carrinho","checkout","loja"]),
-        "tem_gtm": "googletagmanager.com" in h or "gtm.js" in h,
-        "tem_ga4": "gtag" in h or "google-analytics" in h or "ga4" in h,
-        "tem_pixel_meta": "connect.facebook.net" in h or "fbq(" in h,
-        "tem_google_ads": "googleadservices" in h or "conversion" in h,
-        "tem_facebook_ads": "connect.facebook.net" in h,
+        "tem_loja_online": any(
+            kw in html_lower
+            for kw in ["woocommerce", "shopify", "cart", "carrinho", "checkout", "loja"]
+        ),
+        "tem_gtm": "googletagmanager.com" in html_lower or "gtm.js" in html_lower,
+        "tem_ga4": "gtag" in html_lower or "google-analytics" in html_lower or "ga4" in html_lower,
+        "tem_pixel_meta": "connect.facebook.net" in html_lower or "fbq(" in html_lower,
+        "tem_google_ads": "googleadservices" in html_lower or "conversion" in html_lower,
+        "tem_facebook_ads": "connect.facebook.net" in html_lower,
     }
 
 
-def calculate_scores(data: dict) -> dict:
+def calculate_scores(data):
     """Calculate scoring for a company based on digital presence."""
     md = 0
     if data.get("tem_website"): md += 3
