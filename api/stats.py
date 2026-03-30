@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from lib.db import execute_one
+from lib.db import sb_select
 from lib.helpers import json_response, error_response, send_response
 
 
@@ -19,33 +19,37 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            row = execute_one(
-                """
-                SELECT
-                    COUNT(*)                                          AS total_leads,
-                    COUNT(*) FILTER (WHERE tem_website = true)        AS leads_com_website,
-                    COUNT(*) FILTER (WHERE tem_instagram = true)      AS leads_com_instagram,
-                    COUNT(*) FILTER (
-                        WHERE tem_website = false
-                        AND tem_facebook = false
-                        AND tem_instagram = false
-                    )                                                  AS leads_sem_presenca_digital,
-                    AVG(score_oportunidade_comercial)                  AS media_score_oportunidade
-                FROM companies
-                """,
+            # Fetch all companies with only the columns we need for stats
+            companies = sb_select(
+                "companies",
+                select="tem_website,tem_instagram,tem_facebook,score_oportunidade_comercial"
             )
 
-            jobs_row = execute_one(
-                "SELECT COUNT(*) AS jobs_ativos FROM jobs WHERE status = 'a_correr'"
+            total_leads = len(companies)
+            leads_com_website = sum(1 for r in companies if r.get("tem_website"))
+            leads_com_instagram = sum(1 for r in companies if r.get("tem_instagram"))
+            leads_sem_presenca = sum(
+                1 for r in companies
+                if not r.get("tem_website") and not r.get("tem_facebook") and not r.get("tem_instagram")
             )
+            scores = [
+                float(r["score_oportunidade_comercial"])
+                for r in companies
+                if r.get("score_oportunidade_comercial") is not None
+            ]
+            media_score = round(sum(scores) / len(scores), 2) if scores else 0.0
+
+            # Active jobs
+            jobs = sb_select("jobs", filters={"status": "eq.a_correr"}, select="id")
+            jobs_ativos = len(jobs)
 
             stats = {
-                "total_leads": int(row.get("total_leads") or 0),
-                "leads_com_website": int(row.get("leads_com_website") or 0),
-                "leads_com_instagram": int(row.get("leads_com_instagram") or 0),
-                "leads_sem_presenca_digital": int(row.get("leads_sem_presenca_digital") or 0),
-                "jobs_ativos": int(jobs_row.get("jobs_ativos") or 0),
-                "media_score_oportunidade": float(row.get("media_score_oportunidade") or 0),
+                "total_leads": total_leads,
+                "leads_com_website": leads_com_website,
+                "leads_com_instagram": leads_com_instagram,
+                "leads_sem_presenca_digital": leads_sem_presenca,
+                "jobs_ativos": jobs_ativos,
+                "media_score_oportunidade": media_score,
             }
 
             status, headers, body = json_response(stats)

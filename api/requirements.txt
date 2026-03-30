@@ -1,1 +1,1 @@
-psycopg2-binary==2.9.9
+# No external dependencies — uses only Python stdlib (urllib, json, csv, uuid, threading)

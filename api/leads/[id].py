@@ -1,16 +1,16 @@
 """
-GET   /api/leads/[id] — get single lead
-PATCH /api/leads/[id] — update status/notes
+GET    /api/leads/[id] — get single lead
+PATCH  /api/leads/[id] — update status/notes
 DELETE /api/leads/[id] — delete lead
 """
 from http.server import BaseHTTPRequestHandler
 import sys
 import os
-import json
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from lib.db import execute_one, execute_write
+from lib.db import sb_select_one, sb_update, sb_delete
 from lib.helpers import json_response, error_response, send_response, parse_body
 
 
@@ -22,30 +22,25 @@ class handler(BaseHTTPRequestHandler):
         _, headers, _ = json_response({})
         send_response(self, 200, headers, "")
 
-    def get_id(self):
-        # Vercel passes path params via query string
-        import urllib.parse
+    def _get_id(self):
         parsed = urllib.parse.urlparse(self.path)
         params = dict(urllib.parse.parse_qsl(parsed.query))
         return params.get("id") or self.path.rstrip("/").split("/")[-1]
 
     def do_GET(self):
-        lead_id = self.get_id()
+        lead_id = self._get_id()
         try:
-            lead = execute_one(
-                "SELECT * FROM companies WHERE id = %s", (lead_id,)
-            )
+            lead = sb_select_one("companies", filters={"id": f"eq.{lead_id}"})
             if not lead:
                 status, headers, body = error_response("Lead não encontrado", 404)
             else:
                 status, headers, body = json_response(lead)
         except Exception as e:
             status, headers, body = error_response(str(e), 500)
-
         send_response(self, status, headers, body)
 
     def do_PATCH(self):
-        lead_id = self.get_id()
+        lead_id = self._get_id()
         try:
             data = parse_body(self)
             allowed = {"status", "notas"}
@@ -56,28 +51,20 @@ class handler(BaseHTTPRequestHandler):
                 send_response(self, status, headers, body)
                 return
 
-            set_clause = ", ".join(f"{k} = %s" for k in updates)
-            values = list(updates.values()) + [lead_id]
-
-            updated = execute_write(
-                f"UPDATE companies SET {set_clause}, data_atualizacao = NOW() WHERE id = %s RETURNING *",
-                values,
-            )
+            updated = sb_update("companies", {"id": f"eq.{lead_id}"}, updates)
             if not updated:
                 status, headers, body = error_response("Lead não encontrado", 404)
             else:
                 status, headers, body = json_response(updated)
         except Exception as e:
             status, headers, body = error_response(str(e), 500)
-
         send_response(self, status, headers, body)
 
     def do_DELETE(self):
-        lead_id = self.get_id()
+        lead_id = self._get_id()
         try:
-            execute_write("DELETE FROM companies WHERE id = %s", (lead_id,))
+            sb_delete("companies", {"id": f"eq.{lead_id}"})
             status, headers, body = json_response({"ok": True})
         except Exception as e:
             status, headers, body = error_response(str(e), 500)
-
         send_response(self, status, headers, body)

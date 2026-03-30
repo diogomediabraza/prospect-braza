@@ -1,81 +1,53 @@
-"""
-GET  /api/leads  — list leads with filters & pagination
-PATCH /api/leads/[id] — update status/notes (handled by leads/[id].py)
-"""
+"""GET /api/leads — list leads with filters & pagination."""
 from http.server import BaseHTTPRequestHandler
 import sys
 import os
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from lib.db import execute_query, execute_one
+from lib.db import sb_select_count
 from lib.helpers import json_response, error_response, send_response
-import json
-import urllib.parse
 
 
-def build_leads_query(params: dict) -> tuple[str, list]:
-    """Build SQL query from filter params."""
-    conditions = []
-    values = []
+def build_filters(params):
+    """Convert query params into PostgREST filter dict."""
+    filters = {}
 
     if params.get("status"):
-        conditions.append("status = %s")
-        values.append(params["status"])
+        filters["status"] = f"eq.{params['status']}"
 
     if params.get("nicho"):
-        conditions.append("nicho ILIKE %s")
-        values.append(f"%{params['nicho']}%")
+        filters["nicho"] = f"ilike.*{params['nicho']}*"
 
     if params.get("localidade"):
-        conditions.append("localidade ILIKE %s")
-        values.append(f"%{params['localidade']}%")
+        filters["localidade"] = f"ilike.*{params['localidade']}*"
 
     if params.get("search"):
-        conditions.append(
-            "(nome ILIKE %s OR localidade ILIKE %s OR nicho ILIKE %s)"
-        )
-        q = f"%{params['search']}%"
-        values.extend([q, q, q])
+        q = params["search"]
+        filters["or"] = f"(nome.ilike.*{q}*,localidade.ilike.*{q}*,nicho.ilike.*{q}*)"
 
-    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+    return filters
 
-    # Sorting
-    allowed_sorts = {
-        "score_prioridade_sdr",
-        "score_oportunidade_comercial",
-        "score_maturidade_digital",
-        "data_criacao",
-        "nome",
+
+def build_order(params):
+    allowed = {
+        "score_prioridade_sdr", "score_oportunidade_comercial",
+        "score_maturidade_digital", "data_criacao", "nome",
     }
     sort_by = params.get("sort_by", "score_prioridade_sdr")
-    if sort_by not in allowed_sorts:
+    if sort_by not in allowed:
         sort_by = "score_prioridade_sdr"
-    sort_dir = "ASC" if params.get("sort_dir") == "asc" else "DESC"
-
-    # Pagination
-    per_page = min(int(params.get("per_page", 20)), 100)
-    page = max(1, int(params.get("page", 1)))
-    offset = (page - 1) * per_page
-
-    count_query = f"SELECT COUNT(*) as total FROM companies {where}"
-    data_query = f"""
-        SELECT * FROM companies
-        {where}
-        ORDER BY {sort_by} {sort_dir} NULLS LAST
-        LIMIT %s OFFSET %s
-    """
-    values_data = values + [per_page, offset]
-
-    return count_query, values, data_query, values_data, page, per_page
+    direction = "asc" if params.get("sort_dir") == "asc" else "desc"
+    return f"{sort_by}.{direction}.nullslast"
 
 
 class handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
-        pass  # suppress default logging
+        pass
 
     def do_OPTIONS(self):
-        status, headers, body = json_response({})
+        _, headers, _ = json_response({})
         send_response(self, 200, headers, "")
 
     def do_GET(self):
@@ -83,14 +55,20 @@ class handler(BaseHTTPRequestHandler):
         params = dict(urllib.parse.parse_qsl(parsed.query))
 
         try:
-            count_q, count_v, data_q, data_v, page, per_page = build_leads_query(params)
+            per_page = min(int(params.get("per_page", 20)), 100)
+            page = max(1, int(params.get("page", 1)))
+            offset = (page - 1) * per_page
 
-            # Get total
-            count_row = execute_one(count_q, count_v)
-            total = count_row["total"] if count_row else 0
+            filters = build_filters(params)
+            order = build_order(params)
 
-            # Get leads
-            leads = execute_query(data_q, data_v)
+            leads, total = sb_select_count(
+                "companies",
+                filters=filters,
+                order=order,
+                limit=per_page,
+                offset=offset,
+            )
 
             status, headers, body = json_response({
                 "leads": leads,

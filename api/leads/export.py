@@ -1,6 +1,4 @@
-"""
-GET /api/leads/export — export leads as CSV
-"""
+"""GET /api/leads/export — export leads as CSV."""
 from http.server import BaseHTTPRequestHandler
 import sys
 import os
@@ -10,7 +8,7 @@ import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from lib.db import execute_query
+from lib.db import sb_select
 from lib.helpers import error_response, send_response
 
 
@@ -59,39 +57,28 @@ class handler(BaseHTTPRequestHandler):
         params = dict(urllib.parse.parse_qsl(parsed.query))
 
         try:
-            conditions = []
-            values = []
-
+            filters = {}
             if params.get("status"):
-                conditions.append("status = %s")
-                values.append(params["status"])
+                filters["status"] = f"eq.{params['status']}"
             if params.get("nicho"):
-                conditions.append("nicho ILIKE %s")
-                values.append(f"%{params['nicho']}%")
+                filters["nicho"] = f"ilike.*{params['nicho']}*"
             if params.get("localidade"):
-                conditions.append("localidade ILIKE %s")
-                values.append(f"%{params['localidade']}%")
+                filters["localidade"] = f"ilike.*{params['localidade']}*"
 
-            where = "WHERE " + " AND ".join(conditions) if conditions else ""
-            query = f"SELECT * FROM companies {where} ORDER BY score_prioridade_sdr DESC NULLS LAST LIMIT 5000"
+            rows = sb_select(
+                "companies",
+                filters=filters if filters else None,
+                order="score_prioridade_sdr.desc.nullslast",
+                limit=5000,
+            )
 
-            rows = execute_query(query, values if values else None)
-
-            # Build CSV
             output = io.StringIO()
             writer = csv.writer(output, delimiter=";")
-
-            # Header
             writer.writerow([col[1] for col in CSV_COLUMNS])
-
-            # Rows
             for row in rows:
-                writer.writerow([
-                    row.get(col[0], "") for col in CSV_COLUMNS
-                ])
+                writer.writerow([row.get(col[0], "") for col in CSV_COLUMNS])
 
-            csv_content = output.getvalue()
-            csv_bytes = ("\ufeff" + csv_content).encode("utf-8")  # BOM for Excel
+            csv_bytes = ("\ufeff" + output.getvalue()).encode("utf-8")
 
             self.send_response(200)
             self.send_header("Content-Type", "text/csv; charset=utf-8")

@@ -6,7 +6,7 @@ import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from lib.db import execute_write, execute_one
+from lib.db import sb_select_one, sb_update
 from lib.helpers import json_response, error_response, send_response
 
 
@@ -21,7 +21,6 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         parts = parsed.path.strip("/").split("/")
-        # path: /api/jobs/{id}/cancel
         job_id = parts[2] if len(parts) > 2 else None
 
         if not job_id:
@@ -30,7 +29,7 @@ class handler(BaseHTTPRequestHandler):
             return
 
         try:
-            job = execute_one("SELECT * FROM jobs WHERE id = %s", (job_id,))
+            job = sb_select_one("jobs", filters={"id": f"eq.{job_id}"})
             if not job:
                 status, headers, body = error_response("Job não encontrado", 404)
                 send_response(self, status, headers, body)
@@ -43,14 +42,9 @@ class handler(BaseHTTPRequestHandler):
                 send_response(self, status, headers, body)
                 return
 
-            updated = execute_write(
-                """
-                UPDATE jobs
-                SET status = 'cancelado', data_fim = NOW()
-                WHERE id = %s
-                RETURNING *
-                """,
-                (job_id,),
+            updated = sb_update(
+                "jobs", {"id": f"eq.{job_id}"},
+                {"status": "cancelado", "data_fim": "now()"}
             )
             status, headers, body = json_response(updated)
         except Exception as e:

@@ -1,65 +1,151 @@
 """
-Database connection for Neon Postgres (Vercel-native).
-Uses psycopg2 with connection pooling via DATABASE_URL env var.
+Supabase REST API client.
+Replaces psycopg2 — uses only urllib (stdlib, no external deps).
+Env vars required: SUPABASE_URL, SUPABASE_KEY (service_role key)
 """
 import os
-import psycopg2
-import psycopg2.extras
-from contextlib import contextmanager
-from typing import Generator
+import json
+import urllib.request
+import urllib.parse
+import urllib.error
 
-# Neon provides a connection string as DATABASE_URL
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
-
-
-def get_connection():
-    """Get a raw psycopg2 connection."""
-    return psycopg2.connect(
-        DATABASE_URL,
-        cursor_factory=psycopg2.extras.RealDictCursor,
-        connect_timeout=10,
-        options="-c statement_timeout=30000",
-    )
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
 
-@contextmanager
-def get_db() -> Generator:
-    """Context manager for DB connection with auto-commit on success."""
-    conn = get_connection()
+def _base_headers(extra=None):
+    h = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+    if extra:
+        h.update(extra)
+    return h
+
+
+def _rest_url(table, params=None):
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    if params:
+        # build query string, keeping duplicate keys (PostgREST needs them)
+        parts = []
+        for k, v in params.items():
+            if isinstance(v, list):
+                for item in v:
+                    parts.append(f"{urllib.parse.quote(str(k))}={urllib.parse.quote(str(item))}")
+            else:
+                parts.append(f"{urllib.parse.quote(str(k))}={urllib.parse.quote(str(v))}")
+        url += "?" + "&".join(parts)
+    return url
+
+
+def _do_request(req):
     try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            body = resp.read()
+            content_range = resp.headers.get("content-range", "")
+            data = json.loads(body) if body else []
+            return data, content_range
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        raise Exception(f"Supabase {e.code}: {err_body}")
 
 
-def execute_query(query: str, params=None) -> list[dict]:
-    """Execute a SELECT query and return list of dicts."""
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query, params)
-            return [dict(row) for row in cur.fetchall()]
+# ─── SELECT ────────────────────────────────────────────────────────────────────
+
+def sb_select(table, filters=None, select="*", order=None, limit=None, offset=None):
+    """Fetch rows. Returns list of dicts."""
+    params = {"select": select}
+    if filters:
+        params.update(filters)
+    if order:
+        params["order"] = order
+    if limit is not None:
+        params["limit"] = str(limit)
+    if offset is not None:
+        params["offset"] = str(offset)
+    req = urllib.request.Request(_rest_url(table, params), headers=_base_headers())
+    data, _ = _do_request(req)
+    return data if isinstance(data, list) else [data]
 
 
-def execute_one(query: str, params=None) -> dict | None:
-    """Execute a query and return one row."""
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query, params)
-            row = cur.fetchone()
-            return dict(row) if row else None
+def sb_select_count(table, filters=None, select="*", order=None, limit=None, offset=None):
+    """Fetch rows + total count (uses Prefer: count=exact)."""
+    params = {"select": select}
+    if filters:
+        params.update(filters)
+    if order:
+        params["order"] = order
+    if limit is not None:
+        params["limit"] = str(limit)
+    if offset is not None:
+        params["offset"] = str(offset)
+    hdrs = _base_headers({"Prefer": "count=exact"})
+    req = urllib.request.Request(_rest_url(table, params), headers=hdrs)
+    data, content_range = _do_request(req)
+    # content-range: 0-19/142  or  */0
+    total = 0
+    if "/" in content_range:
+        try:
+            total = int(content_range.split("/")[-1])
+        except ValueError:
+            total = len(data) if isinstance(data, list) else 0
+    rows = data if isinstance(data, list) else []
+    return rows, total
 
 
-def execute_write(query: str, params=None) -> dict | None:
-    """Execute an INSERT/UPDATE/DELETE with optional RETURNING."""
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query, params)
-            try:
-                row = cur.fetchone()
-                return dict(row) if row else None
-            except psycopg2.ProgrammingError:
-                return None
+def sb_select_one(table, filters=None, select="*"):
+    """Fetch single row or None."""
+    rows = sb_select(table, filters=filters, select=select, limit=1)
+    return rows[0] if rows else None
+
+
+# ─── INSERT ────────────────────────────────────────────────────────────────────
+
+def sb_insert(table, data, on_conflict=None, ignore_duplicates=False):
+    """INSERT row(s). Returns inserted row or None."""
+    params = {}
+    if on_conflict:
+        params["on_conflict"] = on_conflict
+    prefer = "return=representation"
+    if ignore_duplicates:
+        prefer += ",resolution=ignore-duplicates"
+    hdrs = _base_headers({"Prefer": prefer})
+    body = json.dumps(data).encode()
+    req = urllib.request.Request(
+        _rest_url(table, params if params else None),
+        data=body, headers=hdrs, method="POST"
+    )
+    result, _ = _do_request(req)
+    if isinstance(result, list):
+        return result[0] if result else None
+    return result
+
+
+# ─── UPDATE ────────────────────────────────────────────────────────────────────
+
+def sb_update(table, match_filters, data):
+    """UPDATE rows matching filters. Returns updated row or None."""
+    hdrs = _base_headers({"Prefer": "return=representation"})
+    body = json.dumps(data).encode()
+    req = urllib.request.Request(
+        _rest_url(table, match_filters),
+        data=body, headers=hdrs, method="PATCH"
+    )
+    result, _ = _do_request(req)
+    if isinstance(result, list):
+        return result[0] if result else None
+    return result
+
+
+# ─── DELETE ────────────────────────────────────────────────────────────────────
+
+def sb_delete(table, match_filters):
+    """DELETE rows matching filters."""
+    hdrs = _base_headers({"Prefer": "return=representation"})
+    req = urllib.request.Request(
+        _rest_url(table, match_filters),
+        headers=hdrs, method="DELETE"
+    )
+    result, _ = _do_request(req)
+    return result
