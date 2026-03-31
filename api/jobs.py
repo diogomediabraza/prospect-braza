@@ -183,7 +183,7 @@ class handler(BaseHTTPRequestHandler):
             data = parse_body(self)
             nicho = data.get("nicho", "").strip()
             localidade = data.get("localidade", "").strip()
-            max_resultados = min(int(data.get("max_resultados", 20)), 50)
+            max_resultados = min(int(data.get("max_resultados", 50)), 200)
 
             if not nicho or not localidade:
                 status, headers, body = error_response("nicho e localidade são obrigatórios")
