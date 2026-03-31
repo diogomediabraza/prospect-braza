@@ -7,7 +7,6 @@ import sys
 import os
 import json
 import uuid
-import threading
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -18,7 +17,7 @@ from lib.scraper import scrape_paginas_amarelas, check_digital_presence, calcula
 
 
 def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int):
-    """Run scraping job in background thread."""
+    """Run scraping job synchronously (Vercel kills daemon threads after response)."""
     try:
         # Mark as running
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"status": "a_correr", "progresso": 0})
@@ -36,13 +35,22 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                     "nicho": company.get("nicho", nicho),
                     "localidade": company.get("localidade", localidade),
                     "status": "novo",
-                    "fonte": "Páginas Amarelas",
+                    "fonte": "OpenStreetMap",
                 }
-                full_data.setdefault("tem_facebook", False)
-                full_data.setdefault("tem_instagram", False)
-                full_data.setdefault("tem_linkedin", False)
+                # OSM tags take priority over website-scraped social links
+                if company.get("instagram"):
+                    full_data["instagram"] = company["instagram"]
+                if company.get("facebook"):
+                    full_data["facebook"] = company["facebook"]
+
+                full_data.setdefault("tem_facebook", bool(full_data.get("facebook")))
+                full_data.setdefault("tem_instagram", bool(full_data.get("instagram")))
+                full_data.setdefault("tem_linkedin", bool(full_data.get("linkedin")))
                 full_data.setdefault("tem_youtube", False)
                 full_data.setdefault("tem_tiktok", False)
+                full_data.setdefault("instagram", None)
+                full_data.setdefault("facebook", None)
+                full_data.setdefault("linkedin", None)
 
                 scores = calculate_scores(full_data)
                 full_data.update(scores)
@@ -53,9 +61,13 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                     "nicho": str(full_data.get("nicho", ""))[:100],
                     "localidade": str(full_data.get("localidade", ""))[:100],
                     "morada": str(full_data.get("morada", ""))[:255],
+                    "codigo_postal": str(full_data.get("codigo_postal", ""))[:20],
                     "telefone": str(full_data.get("telefone", ""))[:50],
                     "email": str(full_data.get("email", ""))[:255],
                     "website": str(full_data.get("website", ""))[:255],
+                    "instagram": str(full_data.get("instagram") or "")[:255] or None,
+                    "facebook": str(full_data.get("facebook") or "")[:255] or None,
+                    "linkedin": str(full_data.get("linkedin") or "")[:255] or None,
                     "tem_website": bool(full_data.get("tem_website")),
                     "tem_loja_online": bool(full_data.get("tem_loja_online")),
                     "tem_facebook": bool(full_data.get("tem_facebook")),
@@ -72,7 +84,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                     "score_oportunidade_comercial": full_data.get("score_oportunidade_comercial"),
                     "score_prioridade_sdr": full_data.get("score_prioridade_sdr"),
                     "status": "novo",
-                    "fonte": "Páginas Amarelas",
+                    "fonte": "OpenStreetMap",
                 }
 
                 # Insert, ignore on duplicate (nome+localidade)
@@ -129,7 +141,8 @@ class handler(BaseHTTPRequestHandler):
             data = parse_body(self)
             nicho = data.get("nicho", "").strip()
             localidade = data.get("localidade", "").strip()
-            max_resultados = min(int(data.get("max_resultados", 50)), 200)
+            # Cap at 20 — keeps synchronous execution within Vercel's 60s limit
+            max_resultados = min(int(data.get("max_resultados", 20)), 20)
 
             if not nicho or not localidade:
                 status, headers, body = error_response("nicho e localidade são obrigatórios")
@@ -138,7 +151,7 @@ class handler(BaseHTTPRequestHandler):
 
             job_id = str(uuid.uuid4())
 
-            job = sb_insert("jobs", {
+            sb_insert("jobs", {
                 "id": job_id,
                 "nicho": nicho,
                 "localidade": localidade,
@@ -148,12 +161,13 @@ class handler(BaseHTTPRequestHandler):
                 "total_encontrados": 0,
             })
 
-            t = threading.Thread(
-                target=run_scraping_job,
-                args=(job_id, nicho, localidade, max_resultados),
-                daemon=True,
-            )
-            t.start()
+            # Run synchronously — Vercel kills daemon threads after the response
+            # is sent, so background threading does not work on serverless.
+            run_scraping_job(job_id, nicho, localidade, max_resultados)
+
+            # Return the final job state
+            updated = sb_select("jobs", filters={"id": f"eq.{job_id}"}, limit=1)
+            job = updated[0] if updated else {"id": job_id, "status": "concluido"}
 
             status, headers, body = json_response(job, 201)
         except Exception as e:
