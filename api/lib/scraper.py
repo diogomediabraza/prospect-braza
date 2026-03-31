@@ -361,6 +361,76 @@ def check_digital_presence(website: Optional[str]) -> dict:
     }
 
 
+def scrape_all_sources(nicho: str, localidade: str, max_results: int = 20) -> list:
+    """
+    Aggregates companies from ALL free data sources:
+      1. OpenStreetMap Overpass API   — always runs, no key, richest geo data
+      2. Wikidata SPARQL              — always runs, no key, structured data
+      3. Foursquare Places v3         — runs if FOURSQUARE_API_KEY is set
+      4. HERE Places v1               — runs if HERE_API_KEY is set
+      5. Google Places                — runs if GOOGLE_PLACES_KEY is set
+      6. infopaginas.pt               — HTML scraping, no key (may be blocked from cloud)
+      7. guiaempresa.pt               — HTML scraping, no key (may be blocked from cloud)
+
+    Deduplicates by name (case-insensitive). When the same company appears in multiple
+    sources, missing fields are merged from secondary sources.
+    """
+    # Lazy imports to keep source files optional
+    try:
+        from lib.source_wikidata import scrape_wikidata
+    except Exception:
+        scrape_wikidata = lambda *a, **kw: []  # noqa: E731
+
+    try:
+        from lib.source_infopaginas import scrape_infopaginas, scrape_guiaempresa
+    except Exception:
+        scrape_infopaginas = lambda *a, **kw: []  # noqa: E731
+        scrape_guiaempresa = lambda *a, **kw: []  # noqa: E731
+
+    try:
+        from lib.source_apis import scrape_foursquare, scrape_here, scrape_google_places
+    except Exception:
+        scrape_foursquare = lambda *a, **kw: []  # noqa: E731
+        scrape_here = lambda *a, **kw: []  # noqa: E731
+        scrape_google_places = lambda *a, **kw: []  # noqa: E731
+
+    per_source = max(max_results, 20)  # ask each source for at least 20
+    all_raw: list = []
+
+    for fn in (
+        lambda: scrape_paginas_amarelas(nicho, localidade, per_source),
+        lambda: scrape_wikidata(nicho, localidade, per_source),
+        lambda: scrape_foursquare(nicho, localidade, per_source),
+        lambda: scrape_here(nicho, localidade, per_source),
+        lambda: scrape_google_places(nicho, localidade, per_source),
+        lambda: scrape_infopaginas(nicho, localidade, per_source),
+        lambda: scrape_guiaempresa(nicho, localidade, per_source),
+    ):
+        try:
+            all_raw.extend(fn())
+        except Exception:
+            pass
+
+    # Deduplicate by name — merge missing fields from secondary sources
+    seen: dict = {}  # normalised_name → company dict
+    for company in all_raw:
+        name = company.get("nome", "").strip()
+        if not name or len(name) < 2:
+            continue
+        key = name.lower()
+        if key not in seen:
+            seen[key] = dict(company)
+        else:
+            # Fill in any fields the primary source didn't have
+            primary = seen[key]
+            for field in ("telefone", "email", "website", "morada",
+                          "codigo_postal", "instagram", "facebook", "linkedin"):
+                if not primary.get(field) and company.get(field):
+                    primary[field] = company[field]
+
+    return list(seen.values())[:max_results]
+
+
 def calculate_scores(data: dict) -> dict:
     """Calculate scoring for a company based on digital presence."""
     md = 0

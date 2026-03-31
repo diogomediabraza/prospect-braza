@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from lib.db import sb_select, sb_insert, sb_update
 from lib.helpers import json_response, error_response, send_response, parse_body
-from lib.scraper import scrape_paginas_amarelas, check_digital_presence, calculate_scores
+from lib.scraper import scrape_all_sources, check_digital_presence, calculate_scores
 
 
 def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int):
@@ -22,20 +22,21 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
         # Mark as running
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"status": "a_correr", "progresso": 0})
 
-        raw_companies = scrape_paginas_amarelas(nicho, localidade, max_results)
+        raw_companies = scrape_all_sources(nicho, localidade, max_results)
         total = len(raw_companies)
         inserted = 0
 
         for i, company in enumerate(raw_companies):
             try:
                 presence = check_digital_presence(company.get("website"))
+                fonte = company.get("fonte_raw", "OpenStreetMap")
                 full_data = {
                     **company,
                     **presence,
                     "nicho": company.get("nicho", nicho),
                     "localidade": company.get("localidade", localidade),
                     "status": "novo",
-                    "fonte": "OpenStreetMap",
+                    "fonte": fonte,
                 }
                 # OSM tags take priority over website-scraped social links
                 if company.get("instagram"):
@@ -84,7 +85,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                     "score_oportunidade_comercial": full_data.get("score_oportunidade_comercial"),
                     "score_prioridade_sdr": full_data.get("score_prioridade_sdr"),
                     "status": "novo",
-                    "fonte": "OpenStreetMap",
+                    "fonte": fonte,
                 }
 
                 # Insert, ignore on duplicate (nome+localidade)
