@@ -42,6 +42,9 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                 full_data.setdefault("tem_linkedin", False)
                 full_data.setdefault("tem_youtube", False)
                 full_data.setdefault("tem_tiktok", False)
+                full_data.setdefault("instagram", None)
+                full_data.setdefault("facebook", None)
+                full_data.setdefault("linkedin", None)
 
                 scores = calculate_scores(full_data)
                 full_data.update(scores)
@@ -55,6 +58,9 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                     "telefone": str(full_data.get("telefone", ""))[:50],
                     "email": str(full_data.get("email", ""))[:255],
                     "website": str(full_data.get("website", ""))[:255],
+                    "instagram": str(full_data.get("instagram") or "")[:255] or None,
+                    "facebook": str(full_data.get("facebook") or "")[:255] or None,
+                    "linkedin": str(full_data.get("linkedin") or "")[:255] or None,
                     "tem_website": bool(full_data.get("tem_website")),
                     "tem_loja_online": bool(full_data.get("tem_loja_online")),
                     "tem_facebook": bool(full_data.get("tem_facebook")),
