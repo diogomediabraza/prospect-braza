@@ -13,6 +13,8 @@ import {
   Loader2,
   Trash2,
   AlertTriangle,
+  Instagram,
+  Linkedin,
 } from "lucide-react";
 import type { Company, CompanyStatus } from "@/lib/types";
 import { updateLeadStatus, deleteLead } from "@/lib/api";
@@ -234,11 +236,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
             )}
             {company.website && (
               <a
-                href={
-                  company.website.startsWith("http")
-                    ? company.website
-                    : `https://${company.website}`
-                }
+                href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2.5 p-3 rounded-lg transition-colors col-span-2"
@@ -250,6 +248,48 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                 </span>
                 <ExternalLink size={12} style={{ color: "var(--tm)" }} />
               </a>
+            )}
+            {company.instagram && (
+              <a
+                href={company.instagram.startsWith("http") ? company.instagram : `https://instagram.com/${company.instagram.replace(/^@/, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 p-3 rounded-lg transition-colors"
+                style={{ background: "var(--bg3)" }}
+              >
+                <Instagram size={15} style={{ color: "#e1306c" }} />
+                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>
+                  {company.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//, "@")}
+                </span>
+                <ExternalLink size={12} style={{ color: "var(--tm)" }} />
+              </a>
+            )}
+            {company.linkedin && (
+              <a
+                href={company.linkedin.startsWith("http") ? company.linkedin : `https://linkedin.com/company/${company.linkedin}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 p-3 rounded-lg transition-colors"
+                style={{ background: "var(--bg3)" }}
+              >
+                <Linkedin size={15} style={{ color: "#0077b5" }} />
+                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>
+                  LinkedIn
+                </span>
+                <ExternalLink size={12} style={{ color: "var(--tm)" }} />
+              </a>
+            )}
+            {company.morada && (
+              <div
+                className="flex items-start gap-2.5 p-3 rounded-lg col-span-2"
+                style={{ background: "var(--bg3)" }}
+              >
+                <MapPin size={15} className="flex-shrink-0 mt-0.5" style={{ color: "var(--tm)" }} />
+                <span className="text-sm" style={{ color: "var(--text)" }}>
+                  {company.morada}
+                  {company.codigo_postal ? `, ${company.codigo_postal}` : ""}
+                </span>
+              </div>
             )}
           </div>
 

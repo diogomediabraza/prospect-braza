@@ -16,17 +16,37 @@ from lib.helpers import json_response, error_response, send_response, parse_body
 from lib.scraper import scrape_all_sources, check_digital_presence, calculate_scores
 
 
+def _has_min_contact_data(company: dict) -> bool:
+    """Return True if the company has at least 2 of: telefone, email, website, instagram."""
+    fields = ["telefone", "email", "website", "instagram"]
+    count = sum(1 for f in fields if company.get(f) and str(company[f]).strip())
+    return count >= 2
+
+
 def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int):
     """Run scraping job synchronously (Vercel kills daemon threads after response)."""
     try:
         # Mark as running
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"status": "a_correr", "progresso": 0})
 
-        raw_companies = scrape_all_sources(nicho, localidade, max_results)
-        total = len(raw_companies)
+        # Fetch more raw results so after quality filtering we still have enough
+        raw_fetch = max(max_results * 4, 80)
+        raw_companies = scrape_all_sources(nicho, localidade, raw_fetch)
+
+        # Quality filter: keep only companies with at least 2 contact fields
+        qualified = [c for c in raw_companies if _has_min_contact_data(c)]
+
+        # If quality filter leaves too few, lower the bar to 1 contact field
+        if len(qualified) < max(5, max_results // 4):
+            qualified = [c for c in raw_companies if any(
+                c.get(f) and str(c[f]).strip() for f in ["telefone", "email", "website", "instagram"]
+            )]
+
+        companies_to_insert = qualified[:max_results]
+        total = len(companies_to_insert)
         inserted = 0
 
-        for i, company in enumerate(raw_companies):
+        for i, company in enumerate(companies_to_insert):
             try:
                 presence = check_digital_presence(company.get("website"))
                 fonte = company.get("fonte_raw", "OpenStreetMap")
@@ -142,8 +162,8 @@ class handler(BaseHTTPRequestHandler):
             data = parse_body(self)
             nicho = data.get("nicho", "").strip()
             localidade = data.get("localidade", "").strip()
-            # Cap at 20 — keeps synchronous execution within Vercel's 60s limit
-            max_resultados = min(int(data.get("max_resultados", 20)), 20)
+            # Cap at 50 — keeps synchronous execution within Vercel's 60s limit
+            max_resultados = min(int(data.get("max_resultados", 20)), 50)
 
             if not nicho or not localidade:
                 status, headers, body = error_response("nicho e localidade são obrigatórios")

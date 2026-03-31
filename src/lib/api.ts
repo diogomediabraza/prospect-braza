@@ -102,6 +102,10 @@ export async function cancelJob(id: string): Promise<Job> {
   return request(`/jobs/${id}/cancel`, { method: "POST" });
 }
 
+export async function deleteJob(id: string): Promise<void> {
+  return request(`/jobs/${id}`, { method: "DELETE" });
+}
+
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
 export async function getStats(): Promise<StatsResponse> {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   Filter,
@@ -9,6 +10,7 @@ import {
   Globe,
   Instagram,
   Phone,
+  Mail,
   MapPin,
   ChevronLeft,
   ChevronRight,
@@ -41,18 +43,19 @@ const SORT_OPTIONS = [
   { value: "nome", label: "Nome" },
 ];
 
-export default function LeadsPage() {
+function LeadsPageInner() {
+  const searchParams = useSearchParams();
   const [leads, setLeads] = useState<Company[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Company | null>(null);
 
-  // Filters
+  // Filters — pre-fill from URL params (e.g., when clicking from Jobs page)
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<CompanyStatus | "">("");
-  const [nicho, setNicho] = useState("");
-  const [localidade, setLocalidade] = useState("");
+  const [nicho, setNicho] = useState(searchParams.get("nicho") ?? "");
+  const [localidade, setLocalidade] = useState(searchParams.get("localidade") ?? "");
   const [sortBy, setSortBy] = useState("score_prioridade_sdr");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showFilters, setShowFilters] = useState(false);
@@ -358,8 +361,8 @@ export default function LeadsPage() {
                 background: "var(--card2)",
               }}
             >
-              <div className="col-span-4">Empresa</div>
-              <div className="col-span-2">Contacto</div>
+              <div className="col-span-3">Empresa</div>
+              <div className="col-span-3">Contacto</div>
               <div className="col-span-2">Digital</div>
               <div className="col-span-2 text-center">Score SDR</div>
               <div className="col-span-2 text-right">Status</div>
@@ -373,11 +376,8 @@ export default function LeadsPage() {
                 onClick={() => setSelectedLead(lead)}
               >
                 {/* Company name */}
-                <div className="col-span-4 min-w-0">
-                  <div
-                    className="font-medium text-sm truncate"
-                    style={{ color: "var(--text)" }}
-                  >
+                <div className="col-span-3 min-w-0">
+                  <div className="font-medium text-sm truncate" style={{ color: "var(--text)" }}>
                     {lead.nome}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -387,10 +387,7 @@ export default function LeadsPage() {
                       </span>
                     )}
                     {lead.localidade && (
-                      <span
-                        className="flex items-center gap-0.5 text-xs"
-                        style={{ color: "var(--tm)" }}
-                      >
+                      <span className="flex items-center gap-0.5 text-xs" style={{ color: "var(--tm)" }}>
                         <MapPin size={10} />
                         {lead.localidade}
                       </span>
@@ -398,25 +395,34 @@ export default function LeadsPage() {
                   </div>
                 </div>
 
-                {/* Contact */}
-                <div className="col-span-2 flex flex-col justify-center gap-1">
+                {/* Contact — phone, email, website, instagram */}
+                <div className="col-span-3 flex flex-col justify-center gap-0.5">
                   {lead.telefone && (
-                    <div
-                      className="flex items-center gap-1.5 text-xs"
-                      style={{ color: "var(--ts)" }}
-                    >
-                      <Phone size={11} style={{ color: "var(--tm)" }} />
+                    <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--ts)" }}>
+                      <Phone size={10} style={{ color: "var(--orange)" }} />
                       {lead.telefone}
                     </div>
                   )}
-                  {lead.website && (
-                    <div
-                      className="flex items-center gap-1.5 text-xs truncate"
-                      style={{ color: "var(--ts)" }}
-                    >
-                      <Globe size={11} style={{ color: "var(--tm)" }} />
-                      <span className="truncate">{lead.website}</span>
+                  {lead.email && (
+                    <div className="flex items-center gap-1.5 text-xs truncate" style={{ color: "var(--ts)" }}>
+                      <Mail size={10} style={{ color: "var(--orange)" }} />
+                      <span className="truncate">{lead.email}</span>
                     </div>
+                  )}
+                  {lead.website && (
+                    <div className="flex items-center gap-1.5 text-xs truncate" style={{ color: "var(--ts)" }}>
+                      <Globe size={10} style={{ color: "var(--tm)" }} />
+                      <span className="truncate">{lead.website.replace(/^https?:\/\/(www\.)?/, "")}</span>
+                    </div>
+                  )}
+                  {lead.instagram && !lead.email && !lead.telefone && (
+                    <div className="flex items-center gap-1.5 text-xs truncate" style={{ color: "var(--ts)" }}>
+                      <Instagram size={10} style={{ color: "#e1306c" }} />
+                      <span className="truncate">{lead.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//, "@")}</span>
+                    </div>
+                  )}
+                  {!lead.telefone && !lead.email && !lead.website && !lead.instagram && (
+                    <span className="text-xs" style={{ color: "var(--tm)" }}>— sem contacto —</span>
                   )}
                 </div>
 
@@ -505,5 +511,13 @@ export default function LeadsPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" style={{ background: "var(--bg)" }} />}>
+      <LeadsPageInner />
+    </Suspense>
   );
 }

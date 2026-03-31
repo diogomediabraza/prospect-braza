@@ -1,35 +1,44 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Briefcase,
   RefreshCw,
-  X,
   CheckCircle2,
   AlertCircle,
   Clock,
   Loader2,
-  Users,
-  MapPin,
-  Hash,
   Calendar,
   StopCircle,
+  Trash2,
+  Users,
+  ChevronRight,
 } from "lucide-react";
-import { getJobs, cancelJob } from "@/lib/api";
+import { getJobs, cancelJob, deleteJob } from "@/lib/api";
 import type { Job, JobStatus } from "@/lib/types";
 import { JobStatusBadge } from "@/components/StatusBadge";
 
-function JobCard({ job, onCancel }: { job: Job; onCancel: (id: string) => void }) {
+function JobCard({
+  job,
+  onCancel,
+  onDelete,
+}: {
+  job: Job;
+  onCancel: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const router = useRouter();
   const isRunning = job.status === "a_correr";
   const isDone = job.status === "concluido";
   const isError = job.status === "erro";
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const duration = (() => {
     if (!job.data_fim && !isRunning) return null;
     const start = new Date(job.data_inicio).getTime();
-    const end = job.data_fim
-      ? new Date(job.data_fim).getTime()
-      : Date.now();
+    const end = job.data_fim ? new Date(job.data_fim).getTime() : Date.now();
     const secs = Math.floor((end - start) / 1000);
     if (secs < 60) return `${secs}s`;
     const mins = Math.floor(secs / 60);
@@ -37,54 +46,97 @@ function JobCard({ job, onCancel }: { job: Job; onCancel: (id: string) => void }
     return `${mins}m ${rem}s`;
   })();
 
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteJob(job.id);
+      onDelete(job.id);
+    } catch (err) {
+      console.error(err);
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
+  const handleCardClick = () => {
+    if (isDone && job.total_encontrados > 0) {
+      router.push(
+        `/leads?nicho=${encodeURIComponent(job.nicho)}&localidade=${encodeURIComponent(job.localidade)}`
+      );
+    }
+  };
+
   return (
     <div
-      className={`card-hover p-5 space-y-4 ${isRunning ? "animate-pulse-orange" : ""}`}
+      className={`card-hover p-5 space-y-4 ${isRunning ? "animate-pulse-orange" : ""} ${
+        isDone && job.total_encontrados > 0 ? "cursor-pointer" : ""
+      }`}
       style={
         isRunning
-          ? {
-              borderColor: "rgba(255,85,0,0.3)",
-            }
+          ? { borderColor: "rgba(255,85,0,0.3)" }
           : isDone
-          ? {
-              borderColor: "rgba(16,185,129,0.15)",
-            }
+          ? { borderColor: "rgba(16,185,129,0.15)" }
           : isError
-          ? {
-              borderColor: "rgba(239,68,68,0.15)",
-            }
+          ? { borderColor: "rgba(239,68,68,0.15)" }
           : {}
       }
+      onClick={handleCardClick}
     >
       {/* Job header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className="font-medium"
-              style={{ color: "var(--text)" }}
-            >
+            <span className="font-medium" style={{ color: "var(--text)" }}>
               {job.nicho}
             </span>
             <span style={{ color: "var(--tm)" }}>·</span>
             <span style={{ color: "var(--ts)" }}>{job.localidade}</span>
           </div>
-          <div
-            className="text-xs font-mono mt-0.5"
-            style={{ color: "var(--tm)" }}
-          >
+          <div className="text-xs font-mono mt-0.5" style={{ color: "var(--tm)" }}>
             #{job.id.slice(0, 12)}...
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <JobStatusBadge status={job.status} showDot />
           {isRunning && (
             <button
               className="btn-ghost p-1.5"
-              onClick={() => onCancel(job.id)}
+              onClick={(e) => { e.stopPropagation(); onCancel(job.id); }}
               title="Cancelar job"
             >
               <StopCircle size={14} style={{ color: "#f87171" }} />
+            </button>
+          )}
+          {confirmDelete ? (
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <button
+                className="px-2 py-1 rounded-lg text-xs font-medium"
+                style={{ background: "#ef4444", color: "#fff" }}
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? <Loader2 size={11} className="animate-spin inline" /> : "Apagar"}
+              </button>
+              <button
+                className="btn-ghost px-1.5 py-1 text-xs"
+                onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+              >
+                ×
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn-ghost p-1.5"
+              onClick={handleDelete}
+              title="Apagar job"
+              style={{ color: "var(--tm)" }}
+            >
+              <Trash2 size={13} />
             </button>
           )}
         </div>
@@ -94,21 +146,13 @@ function JobCard({ job, onCancel }: { job: Job; onCancel: (id: string) => void }
       {isRunning && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs" style={{ color: "var(--ts)" }}>
-              Progresso
-            </span>
-            <span
-              className="text-xs font-mono"
-              style={{ color: "var(--ol)" }}
-            >
+            <span className="text-xs" style={{ color: "var(--ts)" }}>Progresso</span>
+            <span className="text-xs font-mono" style={{ color: "var(--ol)" }}>
               {job.progresso}%
             </span>
           </div>
           <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{ width: `${job.progresso}%` }}
-            />
+            <div className="progress-fill" style={{ width: `${job.progresso}%` }} />
           </div>
         </div>
       )}
@@ -117,10 +161,7 @@ function JobCard({ job, onCancel }: { job: Job; onCancel: (id: string) => void }
       {isError && job.mensagem_erro && (
         <div
           className="flex items-start gap-2 p-3 rounded-lg text-xs"
-          style={{
-            background: "rgba(239,68,68,0.08)",
-            color: "#f87171",
-          }}
+          style={{ background: "rgba(239,68,68,0.08)", color: "#f87171" }}
         >
           <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
           {job.mensagem_erro}
@@ -129,51 +170,27 @@ function JobCard({ job, onCancel }: { job: Job; onCancel: (id: string) => void }
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
-        <div
-          className="text-center p-2.5 rounded-lg"
-          style={{ background: "var(--bg3)" }}
-        >
-          <div
-            className="text-lg font-display tracking-wider"
-            style={{ color: "var(--text)" }}
-          >
+        <div className="text-center p-2.5 rounded-lg" style={{ background: "var(--bg3)" }}>
+          <div className="text-lg font-display tracking-wider" style={{ color: "var(--text)" }}>
             {job.total_encontrados}
           </div>
-          <div className="text-xs" style={{ color: "var(--tm)" }}>
-            Leads
-          </div>
+          <div className="text-xs" style={{ color: "var(--tm)" }}>Leads</div>
         </div>
-        <div
-          className="text-center p-2.5 rounded-lg"
-          style={{ background: "var(--bg3)" }}
-        >
-          <div
-            className="text-lg font-display tracking-wider"
-            style={{ color: "var(--text)" }}
-          >
+        <div className="text-center p-2.5 rounded-lg" style={{ background: "var(--bg3)" }}>
+          <div className="text-lg font-display tracking-wider" style={{ color: "var(--text)" }}>
             {job.max_resultados}
           </div>
-          <div className="text-xs" style={{ color: "var(--tm)" }}>
-            Limite
-          </div>
+          <div className="text-xs" style={{ color: "var(--tm)" }}>Limite</div>
         </div>
-        <div
-          className="text-center p-2.5 rounded-lg"
-          style={{ background: "var(--bg3)" }}
-        >
-          <div
-            className="text-lg font-display tracking-wider"
-            style={{ color: "var(--text)" }}
-          >
+        <div className="text-center p-2.5 rounded-lg" style={{ background: "var(--bg3)" }}>
+          <div className="text-lg font-display tracking-wider" style={{ color: "var(--text)" }}>
             {duration ?? "—"}
           </div>
-          <div className="text-xs" style={{ color: "var(--tm)" }}>
-            Duração
-          </div>
+          <div className="text-xs" style={{ color: "var(--tm)" }}>Duração</div>
         </div>
       </div>
 
-      {/* Dates */}
+      {/* Footer */}
       <div
         className="flex items-center justify-between text-xs"
         style={{ color: "var(--tm)" }}
@@ -188,7 +205,14 @@ function JobCard({ job, onCancel }: { job: Job; onCancel: (id: string) => void }
             minute: "2-digit",
           })}
         </span>
-        {isDone && job.data_fim && (
+        {isDone && job.total_encontrados > 0 && (
+          <span className="flex items-center gap-1" style={{ color: "#10b981" }}>
+            <Users size={10} />
+            Ver leads
+            <ChevronRight size={10} />
+          </span>
+        )}
+        {isDone && job.total_encontrados === 0 && (
           <span className="flex items-center gap-1" style={{ color: "#10b981" }}>
             <CheckCircle2 size={10} />
             Concluído
@@ -213,7 +237,6 @@ export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
-  const [cancelling, setCancelling] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadJobs = async (silent = false) => {
@@ -230,31 +253,24 @@ export default function JobsPage() {
 
   useEffect(() => {
     loadJobs();
-
-    // Auto-refresh every 5s if there are running jobs
-    intervalRef.current = setInterval(() => {
-      loadJobs(true);
-    }, 5000);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    intervalRef.current = setInterval(() => loadJobs(true), 5000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
 
   const handleCancel = async (id: string) => {
-    setCancelling(id);
     try {
       const updated = await cancelJob(id);
       setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
     } catch (err) {
       console.error(err);
-    } finally {
-      setCancelling(null);
     }
   };
 
-  const filteredJobs =
-    filter === "all" ? jobs : jobs.filter((j) => j.status === filter);
+  const handleDelete = (id: string) => {
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+  };
+
+  const filteredJobs = filter === "all" ? jobs : jobs.filter((j) => j.status === filter);
 
   const counts = {
     all: jobs.length,
@@ -269,20 +285,13 @@ export default function JobsPage() {
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      {/* Header */}
       <div
         className="border-b px-8 py-5"
-        style={{
-          background: "var(--bg2)",
-          borderColor: "var(--border)",
-        }}
+        style={{ background: "var(--bg2)", borderColor: "var(--border)" }}
       >
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1
-              className="font-display text-2xl tracking-wider"
-              style={{ color: "var(--text)" }}
-            >
+            <h1 className="font-display text-2xl tracking-wider" style={{ color: "var(--text)" }}>
               JOBS DE PESQUISA
             </h1>
             <p className="text-sm flex items-center gap-2" style={{ color: "var(--ts)" }}>
@@ -301,37 +310,24 @@ export default function JobsPage() {
               {jobs.length} jobs no total · auto-refresh activo
             </p>
           </div>
-
-          <button
-            className="btn-secondary"
-            onClick={() => loadJobs()}
-            disabled={loading}
-          >
+          <button className="btn-secondary" onClick={() => loadJobs()} disabled={loading}>
             <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
             Actualizar
           </button>
         </div>
 
-        {/* Filter tabs */}
         <div className="flex items-center gap-1.5 mt-5 flex-wrap">
           {FILTER_TABS.map(({ value, label, icon: Icon }) => {
             const count = counts[value as keyof typeof counts];
             const isActive = filter === value;
-
             return (
               <button
                 key={value}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all"
                 style={
                   isActive
-                    ? {
-                        background: "var(--od)",
-                        color: "var(--ol)",
-                      }
-                    : {
-                        background: "var(--card)",
-                        color: "var(--ts)",
-                      }
+                    ? { background: "var(--od)", color: "var(--ol)" }
+                    : { background: "var(--card)", color: "var(--ts)" }
                 }
                 onClick={() => setFilter(value)}
               >
@@ -354,7 +350,6 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {/* Jobs grid */}
       <div className="px-8 py-6">
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -364,15 +359,9 @@ export default function JobsPage() {
           </div>
         ) : filteredJobs.length === 0 ? (
           <div className="text-center py-20">
-            <Briefcase
-              size={40}
-              className="mx-auto mb-4"
-              style={{ color: "var(--tm)" }}
-            />
+            <Briefcase size={40} className="mx-auto mb-4" style={{ color: "var(--tm)" }} />
             <p className="text-lg font-medium" style={{ color: "var(--ts)" }}>
-              {filter === "all"
-                ? "Nenhum job ainda"
-                : `Nenhum job com status "${filter}"`}
+              {filter === "all" ? "Nenhum job ainda" : `Nenhum job com status "${filter}"`}
             </p>
             <p className="text-sm mt-1" style={{ color: "var(--tm)" }}>
               Vai ao Dashboard para iniciar uma nova pesquisa
@@ -381,11 +370,7 @@ export default function JobsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredJobs.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                onCancel={handleCancel}
-              />
+              <JobCard key={job.id} job={job} onCancel={handleCancel} onDelete={handleDelete} />
             ))}
           </div>
         )}
