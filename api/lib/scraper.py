@@ -303,8 +303,54 @@ def fetch_url(url: str, timeout: int = 10, opener=None) -> str:
         return ""
 
 
+# Patterns that look like emails but are junk (image filenames, trackers, etc.)
+_EMAIL_JUNK = {
+    'example', 'sentry', 'noreply', 'no-reply', '@2x', '.png', '.jpg', '.gif',
+    '.svg', '.woff', '.ttf', 'schema.org', 'w3.org', 'jquery', 'wpcf7',
+    'facebook.com', 'google.com', 'apple.com', 'twitter.com', 'youtube.com',
+    'paypal', 'bugsnag', 'rollbar', 'logrocket', 'cloudflare', 'wordpress.org',
+}
+
+
+def _extract_contacts_from_html(html: str) -> tuple:
+    """
+    Extract a business email and a Portuguese phone number from HTML.
+    Returns (email_or_None, telefone_or_None).
+    """
+    email = None
+    telefone = None
+
+    # ── Email ────────────────────────────────────────────────────────────────
+    candidates = re.findall(
+        r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6}', html
+    )
+    for c in candidates:
+        c_low = c.lower()
+        if not any(j in c_low for j in _EMAIL_JUNK):
+            email = c
+            break
+
+    # ── Portuguese phone (9 digits starting with 2, 3, 6, 7, or 9) ──────────
+    # Strip HTML tags first to avoid false positives from attribute values
+    html_text = re.sub(r'<[^>]+>', ' ', html)
+    phone_matches = re.findall(
+        r'(?:(?:\+351|00351)[\s\-.]?)?([23679]\d{2}[\s\-.]?\d{3}[\s\-.]?\d{3})',
+        html_text
+    )
+    for raw in phone_matches:
+        cleaned = re.sub(r'[\s\-.]', '', raw)
+        if re.match(r'^[23679]\d{8}$', cleaned):
+            telefone = cleaned
+            break
+
+    return email, telefone
+
+
 def check_digital_presence(website: Optional[str]) -> dict:
-    """Check basic digital presence for a company. Returns boolean flags + social media URLs."""
+    """
+    Check digital presence for a company.
+    Returns boolean flags, social media URLs, and contact info extracted from the website.
+    """
     _empty = {
         "tem_website": False, "tem_loja_online": False,
         "tem_gtm": False, "tem_ga4": False,
@@ -312,6 +358,7 @@ def check_digital_presence(website: Optional[str]) -> dict:
         "tem_facebook_ads": False,
         "tem_instagram": False, "tem_facebook": False, "tem_linkedin": False,
         "instagram": None, "facebook": None, "linkedin": None,
+        "email": None, "telefone": None,
     }
     if not website:
         return _empty
@@ -321,6 +368,7 @@ def check_digital_presence(website: Optional[str]) -> dict:
         return {**_empty, "tem_website": True}
     html_lower = html.lower()
 
+    # ── Social media ─────────────────────────────────────────────────────────
     # Extract Instagram page URL (skip post/reel/story links)
     instagram_url = None
     ig_match = re.search(r'https?://(?:www\.)?instagram\.com/([A-Za-z0-9_.]+)/?', html)
@@ -343,6 +391,26 @@ def check_digital_presence(website: Optional[str]) -> dict:
     if li_match:
         linkedin_url = li_match.group(0).rstrip('/')
 
+    # ── Contact info extraction from homepage HTML ────────────────────────────
+    email_found, telefone_found = _extract_contacts_from_html(html)
+
+    # If homepage didn't yield both, try the contact/about page (short timeout)
+    if not email_found or not telefone_found:
+        base = url.rstrip('/')
+        for path in ('/contacto', '/contactos', '/contact', '/contacte-nos', '/sobre'):
+            try:
+                contact_html = fetch_url(f"{base}{path}", timeout=4)
+                if contact_html:
+                    e, t = _extract_contacts_from_html(contact_html)
+                    if not email_found and e:
+                        email_found = e
+                    if not telefone_found and t:
+                        telefone_found = t
+                if email_found and telefone_found:
+                    break
+            except Exception:
+                pass
+
     return {
         "tem_website": True,
         "tem_loja_online": any(kw in html_lower for kw in
@@ -358,6 +426,8 @@ def check_digital_presence(website: Optional[str]) -> dict:
         "instagram": instagram_url,
         "facebook": facebook_url,
         "linkedin": linkedin_url,
+        "email": email_found,
+        "telefone": telefone_found,
     }
 
 

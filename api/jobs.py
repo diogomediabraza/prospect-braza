@@ -58,11 +58,14 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                     "status": "novo",
                     "fonte": fonte,
                 }
-                # OSM tags take priority over website-scraped social links
-                if company.get("instagram"):
-                    full_data["instagram"] = company["instagram"]
-                if company.get("facebook"):
-                    full_data["facebook"] = company["facebook"]
+                # Source data (OSM / Foursquare / etc.) takes priority over
+                # website-extracted values for all contact fields.
+                # Website-extracted values only fill in fields that are missing.
+                for field in ("email", "telefone", "instagram", "facebook", "linkedin"):
+                    original = company.get(field)
+                    if original and str(original).strip():
+                        full_data[field] = original
+                    # else: keep website-extracted value already in full_data
 
                 full_data.setdefault("tem_facebook", bool(full_data.get("facebook")))
                 full_data.setdefault("tem_instagram", bool(full_data.get("instagram")))
