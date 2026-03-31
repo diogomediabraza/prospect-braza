@@ -11,9 +11,11 @@ import {
   Edit3,
   Save,
   Loader2,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import type { Company, CompanyStatus } from "@/lib/types";
-import { updateLeadStatus } from "@/lib/api";
+import { updateLeadStatus, deleteLead } from "@/lib/api";
 import { CompanyStatusBadge } from "./StatusBadge";
 import { ScoreBar, ScoreCircle } from "./ScoreBars";
 import DigitalPresence from "./DigitalPresence";
@@ -22,6 +24,7 @@ interface LeadModalProps {
   company: Company;
   onClose: () => void;
   onUpdate?: (updated: Company) => void;
+  onDelete?: (id: string) => void;
 }
 
 const STATUS_OPTIONS: { value: CompanyStatus; label: string }[] = [
@@ -33,11 +36,30 @@ const STATUS_OPTIONS: { value: CompanyStatus; label: string }[] = [
   { value: "nao_contactar", label: "Não Contactar" },
 ];
 
-export default function LeadModal({ company, onClose, onUpdate }: LeadModalProps) {
+export default function LeadModal({ company, onClose, onUpdate, onDelete }: LeadModalProps) {
   const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState<CompanyStatus>(company.status);
   const [notas, setNotas] = useState(company.notas ?? "");
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteLead(company.id);
+      onDelete?.(company.id);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
 
   // Close on Escape
   useEffect(() => {
@@ -108,12 +130,48 @@ export default function LeadModal({ company, onClose, onUpdate }: LeadModalProps
               )}
             </div>
           </div>
-          <button
-            className="btn-ghost p-2 ml-4 flex-shrink-0"
-            onClick={onClose}
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+            {confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: "#ef4444" }}>
+                  <AlertTriangle size={12} className="inline mr-1" />
+                  Apagar este lead?
+                </span>
+                <button
+                  className="px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+                  style={{ background: "#ef4444", color: "#fff" }}
+                  onClick={handleDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? <Loader2 size={12} className="animate-spin inline" /> : "Confirmar"}
+                </button>
+                <button
+                  className="btn-ghost px-2 py-1 text-xs"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn-ghost p-2 transition-colors"
+                onClick={handleDelete}
+                title="Apagar lead"
+                style={{ color: "var(--tm)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--tm)")}
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+            <button
+              className="btn-ghost p-2"
+              onClick={onClose}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">

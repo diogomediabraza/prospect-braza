@@ -114,6 +114,12 @@ export default function LeadsPage() {
     if (selectedLead?.id === updated.id) setSelectedLead(updated);
   };
 
+  const handleLeadDelete = (id: string) => {
+    setLeads((prev) => prev.filter((l) => l.id !== id));
+    setTotal((prev) => prev - 1);
+    setSelectedLead(null);
+  };
+
   const toggleSort = (field: string) => {
     if (sortBy === field) {
       setSortDir((d) => (d === "desc" ? "asc" : "desc"));
@@ -495,6 +501,7 @@ export default function LeadsPage() {
           company={selectedLead}
           onClose={() => setSelectedLead(null)}
           onUpdate={handleLeadUpdate}
+          onDelete={handleLeadDelete}
         />
       )}
     </div>
