@@ -7,7 +7,6 @@ import sys
 import os
 import json
 import uuid
-import threading
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -129,7 +128,8 @@ class handler(BaseHTTPRequestHandler):
             data = parse_body(self)
             nicho = data.get("nicho", "").strip()
             localidade = data.get("localidade", "").strip()
-            max_resultados = min(int(data.get("max_resultados", 50)), 200)
+            # Cap at 20 — keeps synchronous execution within Vercel's 60s limit
+            max_resultados = min(int(data.get("max_resultados", 20)), 20)
 
             if not nicho or not localidade:
                 status, headers, body = error_response("nicho e localidade são obrigatórios")
@@ -138,7 +138,7 @@ class handler(BaseHTTPRequestHandler):
 
             job_id = str(uuid.uuid4())
 
-            job = sb_insert("jobs", {
+            sb_insert("jobs", {
                 "id": job_id,
                 "nicho": nicho,
                 "localidade": localidade,
@@ -148,12 +148,13 @@ class handler(BaseHTTPRequestHandler):
                 "total_encontrados": 0,
             })
 
-            t = threading.Thread(
-                target=run_scraping_job,
-                args=(job_id, nicho, localidade, max_resultados),
-                daemon=True,
-            )
-            t.start()
+            # Run synchronously — Vercel kills daemon threads after the response
+            # is sent, so background threading does not work on serverless.
+            run_scraping_job(job_id, nicho, localidade, max_resultados)
+
+            # Return the final job state
+            updated = sb_select("jobs", filters={"id": f"eq.{job_id}"}, limit=1)
+            job = updated[0] if updated else {"id": job_id, "status": "concluido"}
 
             status, headers, body = json_response(job, 201)
         except Exception as e:
