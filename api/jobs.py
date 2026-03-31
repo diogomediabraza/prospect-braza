@@ -16,38 +16,21 @@ from lib.helpers import json_response, error_response, send_response, parse_body
 from lib.scraper import scrape_all_sources, check_digital_presence, calculate_scores
 
 
-def _has_min_contact_data(company: dict) -> bool:
-    """Return True if the company has at least 2 of: telefone, email, website, instagram."""
-    fields = ["telefone", "email", "website", "instagram"]
-    count = sum(1 for f in fields if company.get(f) and str(company[f]).strip())
-    return count >= 2
-
-
 def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int):
     """Run scraping job synchronously (Vercel kills daemon threads after response)."""
     try:
         # Mark as running
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"status": "a_correr", "progresso": 0})
 
-        # Fetch more raw results so after quality filtering we still have enough
-        raw_fetch = max(max_results * 4, 80)
-        raw_companies = scrape_all_sources(nicho, localidade, raw_fetch)
+        # Fetch from all sources — no pre-filtering, insert everything with a name
+        raw_companies = scrape_all_sources(nicho, localidade, max_results)
 
-        # Quality filter: keep only companies with at least 2 contact fields
-        qualified = [c for c in raw_companies if _has_min_contact_data(c)]
-
-        # If quality filter leaves too few, lower the bar to 1 contact field
-        if len(qualified) < max(5, max_results // 4):
-            qualified = [c for c in raw_companies if any(
-                c.get(f) and str(c[f]).strip() for f in ["telefone", "email", "website", "instagram"]
-            )]
-
-        companies_to_insert = qualified[:max_results]
-        total = len(companies_to_insert)
+        total = len(raw_companies)
         inserted = 0
 
-        for i, company in enumerate(companies_to_insert):
+        for i, company in enumerate(raw_companies):
             try:
+                # Check digital presence & enrich contacts from website
                 presence = check_digital_presence(company.get("website"))
                 fonte = company.get("fonte_raw", "OpenStreetMap")
                 full_data = {
@@ -60,12 +43,10 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                 }
                 # Source data (OSM / Foursquare / etc.) takes priority over
                 # website-extracted values for all contact fields.
-                # Website-extracted values only fill in fields that are missing.
                 for field in ("email", "telefone", "instagram", "facebook", "linkedin"):
                     original = company.get(field)
                     if original and str(original).strip():
                         full_data[field] = original
-                    # else: keep website-extracted value already in full_data
 
                 full_data.setdefault("tem_facebook", bool(full_data.get("facebook")))
                 full_data.setdefault("tem_instagram", bool(full_data.get("instagram")))
@@ -111,7 +92,6 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                     "fonte": fonte,
                 }
 
-                # Insert, ignore on duplicate (nome+localidade)
                 sb_insert(
                     "companies", row,
                     on_conflict="nome,localidade",
@@ -185,11 +165,8 @@ class handler(BaseHTTPRequestHandler):
                 "total_encontrados": 0,
             })
 
-            # Run synchronously — Vercel kills daemon threads after the response
-            # is sent, so background threading does not work on serverless.
             run_scraping_job(job_id, nicho, localidade, max_resultados)
 
-            # Return the final job state
             updated = sb_select("jobs", filters={"id": f"eq.{job_id}"}, limit=1)
             job = updated[0] if updated else {"id": job_id, "status": "concluido"}
 
