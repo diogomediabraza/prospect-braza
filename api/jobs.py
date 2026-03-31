@@ -8,6 +8,7 @@ import os
 import json
 import uuid
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -15,24 +16,77 @@ from lib.db import sb_select, sb_insert, sb_update
 from lib.helpers import json_response, error_response, send_response, parse_body
 from lib.scraper import scrape_all_sources, check_digital_presence, calculate_scores
 
+_EMPTY_PRESENCE = {
+    "tem_website": False, "tem_loja_online": False,
+    "tem_gtm": False, "tem_ga4": False,
+    "tem_pixel_meta": False, "tem_google_ads": False,
+    "tem_facebook_ads": False,
+    "tem_instagram": False, "tem_facebook": False, "tem_linkedin": False,
+    "instagram": None, "facebook": None, "linkedin": None,
+    "email": None, "telefone": None,
+}
+
+
+def _enrich(company: dict) -> dict:
+    """Worker: fetch digital presence for one company. Returns presence dict."""
+    website = company.get("website")
+    if not website:
+        return dict(_EMPTY_PRESENCE)
+    try:
+        return check_digital_presence(website)
+    except Exception:
+        return {**_EMPTY_PRESENCE, "tem_website": True}
+
 
 def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int):
-    """Run scraping job synchronously (Vercel kills daemon threads after response)."""
+    """
+    Run scraping job synchronously.
+    Uses ThreadPoolExecutor to enrich all company websites in parallel,
+    making the most of Vercel's 60-second serverless limit.
+    """
     try:
-        # Mark as running
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"status": "a_correr", "progresso": 0})
 
-        # Fetch from all sources — no pre-filtering, insert everything with a name
+        # Step 1: Collect raw companies from all sources
         raw_companies = scrape_all_sources(nicho, localidade, max_results)
-
         total = len(raw_companies)
-        inserted = 0
 
+        if total == 0:
+            sb_update("jobs", {"id": f"eq.{job_id}"},
+                      {"status": "concluido", "progresso": 100,
+                       "total_encontrados": 0, "data_fim": "now()"})
+            return
+
+        sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": 10})
+
+        # Step 2: Enrich all websites in PARALLEL (10 threads, 45s timeout)
+        presence_map: dict = {}
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(_enrich, company): i
+                for i, company in enumerate(raw_companies)
+            }
+            done = 0
+            for future in as_completed(futures, timeout=45):
+                i = futures[future]
+                try:
+                    presence_map[i] = future.result()
+                except Exception:
+                    presence_map[i] = dict(_EMPTY_PRESENCE)
+                done += 1
+                # Progress: 10% -> 80% during enrichment
+                progress = 10 + int((done / total) * 70)
+                sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": progress})
+
+        sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": 85})
+
+        # Step 3: Build rows and insert into DB
+        inserted = 0
         for i, company in enumerate(raw_companies):
             try:
-                # Check digital presence & enrich contacts from website
-                presence = check_digital_presence(company.get("website"))
+                presence = presence_map.get(i, dict(_EMPTY_PRESENCE))
                 fonte = company.get("fonte_raw", "OpenStreetMap")
+
                 full_data = {
                     **company,
                     **presence,
@@ -41,8 +95,8 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                     "status": "novo",
                     "fonte": fonte,
                 }
-                # Source data (OSM / Foursquare / etc.) takes priority over
-                # website-extracted values for all contact fields.
+
+                # Source data takes priority over website-extracted contacts
                 for field in ("email", "telefone", "instagram", "facebook", "linkedin"):
                     original = company.get(field)
                     if original and str(original).strip():
@@ -92,36 +146,20 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                     "fonte": fonte,
                 }
 
-                sb_insert(
-                    "companies", row,
-                    on_conflict="nome,localidade",
-                    ignore_duplicates=True
-                )
+                sb_insert("companies", row,
+                          on_conflict="nome,localidade",
+                          ignore_duplicates=True)
                 inserted += 1
             except Exception:
                 pass
 
-            progress = int(((i + 1) / max(total, 1)) * 100)
-            sb_update(
-                "jobs", {"id": f"eq.{job_id}"},
-                {"progresso": progress, "total_encontrados": inserted}
-            )
-
-        sb_update(
-            "jobs", {"id": f"eq.{job_id}"},
-            {
-                "status": "concluido",
-                "progresso": 100,
-                "total_encontrados": inserted,
-                "data_fim": "now()",
-            }
-        )
+        sb_update("jobs", {"id": f"eq.{job_id}"},
+                  {"status": "concluido", "progresso": 100,
+                   "total_encontrados": inserted, "data_fim": "now()"})
 
     except Exception as e:
-        sb_update(
-            "jobs", {"id": f"eq.{job_id}"},
-            {"status": "erro", "mensagem_erro": str(e)[:500], "data_fim": "now()"}
-        )
+        sb_update("jobs", {"id": f"eq.{job_id}"},
+                  {"status": "erro", "mensagem_erro": str(e)[:500], "data_fim": "now()"})
 
 
 class handler(BaseHTTPRequestHandler):
@@ -145,7 +183,6 @@ class handler(BaseHTTPRequestHandler):
             data = parse_body(self)
             nicho = data.get("nicho", "").strip()
             localidade = data.get("localidade", "").strip()
-            # Cap at 50 — keeps synchronous execution within Vercel's 60s limit
             max_resultados = min(int(data.get("max_resultados", 20)), 50)
 
             if not nicho or not localidade:
@@ -169,7 +206,6 @@ class handler(BaseHTTPRequestHandler):
 
             updated = sb_select("jobs", filters={"id": f"eq.{job_id}"}, limit=1)
             job = updated[0] if updated else {"id": job_id, "status": "concluido"}
-
             status, headers, body = json_response(job, 201)
         except Exception as e:
             status, headers, body = error_response(str(e), 500)
