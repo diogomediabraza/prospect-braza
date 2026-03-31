@@ -149,7 +149,7 @@ def _normalize_phone(raw: str) -> str:
     """Normalize a phone number to 9 Portuguese digits."""
     if not raw:
         return ""
-    cleaned = re.sub(r'[\s\-\.\(\)+]', '', raw)
+    cleaned = re.sub(r'\[\s\-\.\(\)+]', '', raw)
     # Remove country code
     cleaned = re.sub(r'^351', '', cleaned)
     # Must be 9 digits starting with 2, 3, 6, 7, 9
@@ -262,33 +262,60 @@ def fetch_url(url: str, timeout: int = 10, opener=None) -> str:
 
 
 def check_digital_presence(website: Optional[str]) -> dict:
-    """Check basic digital presence for a company. Returns dict with boolean flags."""
+    """Check basic digital presence for a company. Returns boolean flags + social media URLs."""
+    _empty = {
+        "tem_website": False, "tem_loja_online": False,
+        "tem_gtm": False, "tem_ga4": False,
+        "tem_pixel_meta": False, "tem_google_ads": False,
+        "tem_facebook_ads": False,
+        "tem_instagram": False, "tem_facebook": False, "tem_linkedin": False,
+        "instagram": None, "facebook": None, "linkedin": None,
+    }
     if not website:
-        return {
-            "tem_website": False, "tem_loja_online": False,
-            "tem_gtm": False, "tem_ga4": False,
-            "tem_pixel_meta": False, "tem_google_ads": False,
-            "tem_facebook_ads": False,
-        }
+        return _empty
     url = website if website.startswith("http") else f"https://{website}"
     html = fetch_url(url, timeout=10)
     if not html:
-        return {
-            "tem_website": True, "tem_loja_online": False,
-            "tem_gtm": False, "tem_ga4": False,
-            "tem_pixel_meta": False, "tem_google_ads": False,
-            "tem_facebook_ads": False,
-        }
+        return {**_empty, "tem_website": True}
     html_lower = html.lower()
+
+    # Extract Instagram page URL (skip post/reel/story links)
+    instagram_url = None
+    ig_match = re.search(r'https?://(?:www\.)?instagram\.com/([A-Za-z0-9_.]+)/?', html)
+    if ig_match and not any(x in ig_match.group(0) for x in
+                            ['/p/', '/reel/', '/stories/', '/explore/', 'sharer']):
+        instagram_url = ig_match.group(0).rstrip('/')
+
+    # Extract Facebook page URL (skip share/tracker links)
+    facebook_url = None
+    fb_match = re.search(r'https?://(?:www\.)?facebook\.com/([A-Za-z0-9_.]+)/?', html)
+    if fb_match and not any(x in fb_match.group(0) for x in
+                            ['sharer', '/tr?', 'plugins', 'dialog', '/share']):
+        facebook_url = fb_match.group(0).rstrip('/')
+
+    # Extract LinkedIn company/profile URL
+    linkedin_url = None
+    li_match = re.search(
+        r'https?://(?:www\.)?linkedin\.com/(?:company|in)/([A-Za-z0-9_-]+)/?', html
+    )
+    if li_match:
+        linkedin_url = li_match.group(0).rstrip('/')
+
     return {
         "tem_website": True,
-        "tem_loja_online": any(kw in html_lower for kw in
+        "tem_loja_online": any(kw.in html_lower for kw in
             ["woocommerce", "shopify", "cart", "carrinho", "checkout", "loja"]),
         "tem_gtm": "googletagmanager.com" in html_lower or "gtm.js" in html_lower,
         "tem_ga4": "gtag" in html_lower or "google-analytics" in html_lower or "ga4" in html_lower,
         "tem_pixel_meta": "connect.facebook.net" in html_lower or "fbq(" in html_lower,
         "tem_google_ads": "googleadservices" in html_lower or "conversion" in html_lower,
         "tem_facebook_ads": "connect.facebook.net" in html_lower,
+        "tem_instagram": instagram_url is not None or "instagram.com" in html_lower,
+        "tem_facebook": facebook_url is not None or \"facebook.com\" in html_lower,
+        "tem_linkedin": linkedin_url is not None or \"linkedin.com\" in html_lower,
+        "instagram": instagram_url,
+        "facebook": facebook_url,
+        "linkedin": linkedin_url,
     }
 
 
