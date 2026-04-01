@@ -1,6 +1,6 @@
 """
 Scraper using OpenStreetMap Overpass API for Portuguese businesses.
-pai.pt / PÃ¡ginas Amarelas blocks cloud IPs via Cloudflare TLS fingerprinting,
+pai.pt / Páginas Amarelas blocks cloud IPs via Cloudflare TLS fingerprinting,
 so we use OSM Overpass (free, open, no bot protection) instead.
 """
 import re
@@ -131,7 +131,7 @@ def _build_query(nicho: str, bbox: tuple, limit: int) -> str:
     parts = []
 
     if tags:
-        # Tag-based search only â fast and reliable for known niches
+        # Tag-based search only — fast and reliable for known niches
         for k, v in tags:
             parts.append(f'  node["{k}"="{v}"]["name"]({bb});')
             parts.append(f'  way["{k}"="{v}"]["name"]({bb});')
@@ -251,7 +251,7 @@ def scrape_paginas_amarelas(
     """
     bbox = _geocode(localidade)
     if not bbox:
-        print(f"[OSM] Geocode FAILED for '{localidade}' â no bbox returned")
+        print(f"[OSM] Geocode FAILED for '{localidade}' — no bbox returned")
         return []
     print(f"[OSM] Geocode OK for '{localidade}': bbox={bbox}")
 
@@ -269,7 +269,7 @@ def scrape_paginas_amarelas(
         print(f"[OSM] Server {server_url} failed, trying next...")
 
     if not body:
-        print("[OSM] All Overpass servers failed â empty body")
+        print("[OSM] All Overpass servers failed — empty body")
         return []
 
     try:
@@ -527,7 +527,16 @@ def scrape_all_sources(nicho: str, localidade: str, max_results: int = 20) -> li
 
 
 def calculate_scores(data: dict) -> dict:
-    """Calculate scoring for a company based on digital presence."""
+    """Calculate scoring for a company based on digital presence.
+
+    SDR Priority logic:
+    - A lead the SDR CANNOT contact is nearly worthless (max 2.0)
+    - Phone is the most valuable contact method for SDR (+4)
+    - Email is second (+2.5)
+    - Website alone means the SDR can find a contact form (+1)
+    - High opportunity + contactable = high priority
+    """
+    # --- Maturidade Digital (0-10): what marketing tools they use ---
     md = 0
     if data.get("tem_website"): md += 3
     if data.get("tem_instagram") or data.get("tem_facebook"): md += 2
@@ -536,17 +545,33 @@ def calculate_scores(data: dict) -> dict:
     if data.get("tem_loja_online"): md += 1
     score_maturidade = min(10.0, md)
 
+    # --- Oportunidade Comercial (0-10): inverse of maturity ---
     oportunidade = 10 - score_maturidade
     if not data.get("tem_pixel_meta") and not data.get("tem_google_ads"):
         oportunidade = min(10.0, oportunidade + 2)
     score_oportunidade = round(oportunidade, 1)
 
-    contact_score = 0
-    if data.get("telefone"): contact_score += 3
-    if data.get("email"): contact_score += 2
+    # --- Contactabilidade (0-7.5): can the SDR actually reach them? ---
+    # Check for real values (not None, not "None" string, not empty)
+    def _has(field):
+        v = data.get(field)
+        return bool(v and str(v).strip() and str(v).strip().lower() != "none")
 
-    prioridade = (score_oportunidade * 0.6 + contact_score) * (10 / 8)
-    score_prioridade = min(10.0, round(prioridade, 1))
+    contact_score = 0
+    if _has("telefone"): contact_score += 4      # Phone = gold for SDR
+    if _has("email"): contact_score += 2.5        # Email = silver
+    if _has("website"): contact_score += 1        # Website = can find contact form
+    contact_score = min(7.5, contact_score)
+
+    # --- Prioridade SDR (0-10) ---
+    # Formula: opportunity matters, but ONLY if you can contact them
+    if contact_score == 0:
+        # No way to contact = nearly worthless lead for SDR
+        score_prioridade = round(min(2.0, score_oportunidade * 0.2), 1)
+    else:
+        # Weighted: 40% opportunity + 60% contactability (normalized to 10)
+        raw = (score_oportunidade * 0.4) + (contact_score / 7.5 * 10) * 0.6
+        score_prioridade = min(10.0, round(raw, 1))
 
     return {
         "score_maturidade_digital": round(score_maturidade, 1),
