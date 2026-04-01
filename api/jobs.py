@@ -4,12 +4,18 @@ POST /api/jobs — create a new scraping job
 
 CHANGELOG:
 - run_scraping_job() agora passa job_id para cada company inserida
-- Leads classificados como 'lixo' NÃO são inseridos na base
+- Leads classificados como 'lixo' ou 'fraco' NÃO são inseridos na base
+  (apenas 'bom' score≥35 e 'excelente' score≥60 são guardados)
+- Busca 4× mais candidatos brutos para garantir pool suficiente
+- Para assim que atinge max_results leads de qualidade
 - Novos campos gravados: score_qualidade_lead, classificacao_lead,
   motivo_descarte, confianca_email, confianca_telefone, fontes_encontradas
 - total_validos e total_descartados actualizados no job
 - max_resultados aumentado para 200
 """
+
+# Classificações mínimas aceites — abaixo disto o lead é descartado
+_QUALIDADE_MINIMA = {"bom", "excelente"}  # score_qualidade_lead ≥ 35
 from http.server import BaseHTTPRequestHandler
 import sys
 import os
@@ -78,10 +84,13 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"status": "a_correr", "progresso": 0})
 
         # ── ETAPA 1: Descoberta ───────────────────────────────────────────────
-        log(f"[JOB {job_id[:8]}] Etapa 1: Descoberta de candidatos...")
-        raw_companies = scrape_all_sources(nicho, localidade, max_results)
+        # Busca 4× mais candidatos para garantir leads de qualidade suficientes
+        # (muitos serão filtrados como 'fraco' ou 'lixo' na etapa 3)
+        pool_size = min(max_results * 4, 400)
+        log(f"[JOB {job_id[:8]}] Etapa 1: Descoberta — a pedir {pool_size} candidatos para garantir {max_results} de qualidade...")
+        raw_companies = scrape_all_sources(nicho, localidade, pool_size)
         total = len(raw_companies)
-        log(f"[JOB {job_id[:8]}] {total} candidatos encontrados antes de deduplicação")
+        log(f"[JOB {job_id[:8]}] {total} candidatos encontrados antes de filtragem")
 
         if total == 0:
             sb_update("jobs", {"id": f"eq.{job_id}"},
@@ -163,11 +172,17 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                 # Classificar o lead
                 classificacao, motivo_descarte = classify_lead(full_data)
 
-                # LIXO não é inserido — apenas contado
-                if classificacao == "lixo":
+                # Apenas 'bom' e 'excelente' são inseridos — 'fraco' e 'lixo' descartados
+                if classificacao not in _QUALIDADE_MINIMA:
                     descartados += 1
-                    log(f"[LIXO] '{full_data.get('nome', '?')}': {motivo_descarte}")
+                    motivo = motivo_descarte or f"Score insuficiente ({full_data.get('score_qualidade_lead', 0)}/100 — {classificacao})"
+                    log(f"[DESCARTADO/{classificacao.upper()}] '{full_data.get('nome', '?')}': {motivo}")
                     continue
+
+                # Já atingiu o número pedido — para de inserir
+                if inserted >= max_results:
+                    log(f"[JOB {job_id[:8]}] {max_results} leads de qualidade atingidos — a parar.")
+                    break
 
                 # Construir row com todos os campos novos
                 fontes_array = fontes if isinstance(fontes, list) else [fontes]
