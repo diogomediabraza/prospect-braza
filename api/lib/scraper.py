@@ -1,6 +1,6 @@
 """
 Scraper using OpenStreetMap Overpass API for Portuguese businesses.
-pai.pt / Páginas Amarelas blocks cloud IPs via Cloudflare TLS fingerprinting,
+pai.pt / PÃ¡ginas Amarelas blocks cloud IPs via Cloudflare TLS fingerprinting,
 so we use OSM Overpass (free, open, no bot protection) instead.
 """
 import re
@@ -89,7 +89,8 @@ def _fetch(url: str, data: bytes = None, timeout: int = 20) -> str:
                 except zlib.error:
                     raw = zlib.decompress(raw, -zlib.MAX_WBITS)
             return raw.decode("utf-8", errors="replace")
-    except Exception:
+    except Exception as e:
+        print(f"[_fetch] ERROR for {url[:80]}: {e}")
         return ""
 
 
@@ -126,7 +127,7 @@ def _build_query(nicho: str, bbox: tuple, limit: int) -> str:
 
     parts = []
 
-    # Tag-based search (most reliable — finds all businesses of that type)
+    # Tag-based search (most reliable â finds all businesses of that type)
     for k, v in tags:
         parts.append(f'  node["{k}"="{v}"]["name"]({bb});')
         parts.append(f'  way["{k}"="{v}"]["name"]({bb});')
@@ -136,7 +137,7 @@ def _build_query(nicho: str, bbox: tuple, limit: int) -> str:
     parts.append(f'  way["name"~"{nicho_lower}",i]({bb});')
 
     return (
-        f'[out:json][timeout:25]\n'
+        f'[out:json][timeout:25];\n'
         f'(\n'
         + "\n".join(parts) +
         f'\n);\n'
@@ -245,21 +246,27 @@ def scrape_paginas_amarelas(
     """
     bbox = _geocode(localidade)
     if not bbox:
+        print(f"[OSM] Geocode FAILED for '{localidade}' â no bbox returned")
         return []
+    print(f"[OSM] Geocode OK for '{localidade}': bbox={bbox}")
 
     query = _build_query(nicho, bbox, max_results)
+    print(f"[OSM] Overpass query:\n{query}")
     data = urllib.parse.urlencode({"data": query}).encode("utf-8")
     body = _fetch(OVERPASS_URL, data=data, timeout=25)
 
     if not body:
+        print("[OSM] Overpass returned empty body")
         return []
 
     try:
         result = json.loads(body)
-    except Exception:
+    except Exception as e:
+        print(f"[OSM] JSON parse error: {e}")
         return []
 
     elements = result.get("elements", [])
+    print(f"[OSM] Overpass returned {len(elements)} elements")
 
     seen: set = set()
     companies: list = []
@@ -467,19 +474,24 @@ def scrape_all_sources(nicho: str, localidade: str, max_results: int = 20) -> li
     per_source = max(max_results, 20)  # ask each source for at least 20
     all_raw: list = []
 
-    for fn in (
-        lambda: scrape_paginas_amarelas(nicho, localidade, per_source),
-        lambda: scrape_wikidata(nicho, localidade, per_source),
-        lambda: scrape_foursquare(nicho, localidade, per_source),
-        lambda: scrape_here(nicho, localidade, per_source),
-        lambda: scrape_google_places(nicho, localidade, per_source),
-        lambda: scrape_infopaginas(nicho, localidade, per_source),
-        lambda: scrape_guiaempresa(nicho, localidade, per_source),
-    ):
+    sources = [
+        ("OSM Overpass", lambda: scrape_paginas_amarelas(nicho, localidade, per_source)),
+        ("Wikidata", lambda: scrape_wikidata(nicho, localidade, per_source)),
+        ("Foursquare", lambda: scrape_foursquare(nicho, localidade, per_source)),
+        ("HERE", lambda: scrape_here(nicho, localidade, per_source)),
+        ("Google Places", lambda: scrape_google_places(nicho, localidade, per_source)),
+        ("InfoPaginas", lambda: scrape_infopaginas(nicho, localidade, per_source)),
+        ("GuiaEmpresa", lambda: scrape_guiaempresa(nicho, localidade, per_source)),
+    ]
+
+    for name, fn in sources:
         try:
-            all_raw.extend(fn())
-        except Exception:
-            pass
+            print(f"[scrape_all] Calling {name}...")
+            results = fn()
+            print(f"[scrape_all] {name} returned {len(results)} results")
+            all_raw.extend(results)
+        except Exception as e:
+            print(f"[scrape_all] {name} FAILED: {e}")
 
     # Deduplicate by name -- merge missing fields from secondary sources
     seen: dict = {}  # normalised_name -> company dict
