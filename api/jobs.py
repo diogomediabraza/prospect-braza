@@ -115,19 +115,28 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                 scores = calculate_scores(full_data)
                 full_data.update(scores)
 
+                # Helper: safely convert to string, treating None as empty
+                def _s(val, maxlen=255):
+                    if val is None:
+                        return None
+                    s = str(val).strip()
+                    if not s or s.lower() == "none":
+                        return None
+                    return s[:maxlen]
+
                 row = {
                     "id": str(uuid.uuid4()),
-                    "nome": str(full_data.get("nome", ""))[:255],
-                    "nicho": str(full_data.get("nicho", ""))[:100],
-                    "localidade": str(full_data.get("localidade", ""))[:100],
-                    "morada": str(full_data.get("morada", ""))[:255],
-                    "codigo_postal": str(full_data.get("codigo_postal", ""))[:20],
-                    "telefone": str(full_data.get("telefone", ""))[:50],
-                    "email": str(full_data.get("email", ""))[:255],
-                    "website": str(full_data.get("website", ""))[:255],
-                    "instagram": str(full_data.get("instagram") or "")[:255] or None,
-                    "facebook": str(full_data.get("facebook") or "")[:255] or None,
-                    "linkedin": str(full_data.get("linkedin") or "")[:255] or None,
+                    "nome": _s(full_data.get("nome"), 255) or "",
+                    "nicho": _s(full_data.get("nicho"), 100) or "",
+                    "localidade": _s(full_data.get("localidade"), 100) or "",
+                    "morada": _s(full_data.get("morada"), 255),
+                    "codigo_postal": _s(full_data.get("codigo_postal"), 20),
+                    "telefone": _s(full_data.get("telefone"), 50),
+                    "email": _s(full_data.get("email"), 255),
+                    "website": _s(full_data.get("website"), 255),
+                    "instagram": _s(full_data.get("instagram"), 255),
+                    "facebook": _s(full_data.get("facebook"), 255),
+                    "linkedin": _s(full_data.get("linkedin"), 255),
                     "tem_website": bool(full_data.get("tem_website")),
                     "tem_loja_online": bool(full_data.get("tem_loja_online")),
                     "tem_facebook": bool(full_data.get("tem_facebook")),
