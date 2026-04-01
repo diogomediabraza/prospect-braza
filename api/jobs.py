@@ -9,6 +9,7 @@ import json
 import uuid
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -54,7 +55,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
         if total == 0:
             sb_update("jobs", {"id": f"eq.{job_id}"},
                       {"status": "concluido", "progresso": 100,
-                       "total_encontrados": 0, "data_fim": "now()"})
+                       "total_encontrados": 0, "data_fim": datetime.now(timezone.utc).isoformat()})
             return
 
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": 10})
@@ -155,11 +156,11 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
 
         sb_update("jobs", {"id": f"eq.{job_id}"},
                   {"status": "concluido", "progresso": 100,
-                   "total_encontrados": inserted, "data_fim": "now()"})
+                   "total_encontrados": inserted, "data_fim": datetime.now(timezone.utc).isoformat()})
 
     except Exception as e:
         sb_update("jobs", {"id": f"eq.{job_id}"},
-                  {"status": "erro", "mensagem_erro": str(e)[:500], "data_fim": "now()"})
+                  {"status": "erro", "mensagem_erro": str(e)[:500], "data_fim": datetime.now(timezone.utc).isoformat()})
 
 
 class handler(BaseHTTPRequestHandler):
@@ -210,4 +211,5 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             status, headers, body = error_response(str(e), 500)
 
+        send_response(self, status, headers, body)
         send_response(self, status, headers, body)
