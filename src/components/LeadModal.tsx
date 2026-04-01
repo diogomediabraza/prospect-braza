@@ -15,8 +15,12 @@ import {
   AlertTriangle,
   Instagram,
   Linkedin,
+  ShieldCheck,
+  ShieldAlert,
+  AlertCircle,
+  Layers,
 } from "lucide-react";
-import type { Company, CompanyStatus } from "@/lib/types";
+import type { Company, CompanyStatus, LeadClassificacao, ConfiancaField } from "@/lib/types";
 import { updateLeadStatus, deleteLead } from "@/lib/api";
 import { CompanyStatusBadge } from "./StatusBadge";
 import { ScoreBar, ScoreCircle } from "./ScoreBars";
@@ -30,44 +34,83 @@ interface LeadModalProps {
 }
 
 const STATUS_OPTIONS: { value: CompanyStatus; label: string }[] = [
-  { value: "novo", label: "Novo" },
-  { value: "abordado", label: "Abordado" },
-  { value: "em_negociacao", label: "Em Negociação" },
-  { value: "fechado", label: "Fechado" },
-  { value: "descartado", label: "Descartado" },
-  { value: "nao_contactar", label: "Não Contactar" },
+  { value: "novo",           label: "Novo" },
+  { value: "abordado",       label: "Abordado" },
+  { value: "em_negociacao",  label: "Em Negociação" },
+  { value: "fechado",        label: "Fechado" },
+  { value: "descartado",     label: "Descartado" },
+  { value: "nao_contactar",  label: "Não Contactar" },
 ];
 
+// ── Helpers visuais ───────────────────────────────────────────────────────────
+
+const CLASSIF_CONFIG: Record<
+  LeadClassificacao,
+  { label: string; color: string; bg: string; emoji: string }
+> = {
+  excelente: { label: "Excelente", color: "#10b981", bg: "rgba(16,185,129,0.12)", emoji: "⭐" },
+  bom:       { label: "Bom",       color: "#60a5fa", bg: "rgba(96,165,250,0.12)", emoji: "✅" },
+  fraco:     { label: "Fraco",     color: "#f59e0b", bg: "rgba(245,158,11,0.12)", emoji: "⚠️" },
+  lixo:      { label: "Lixo",      color: "#ef4444", bg: "rgba(239,68,68,0.12)",  emoji: "🗑️" },
+  pendente:  { label: "Pendente",  color: "#6b7280", bg: "rgba(107,114,128,0.1)", emoji: "⏳" },
+};
+
+function ClassificacaoBlock({ value, score, motivo }: {
+  value?: LeadClassificacao;
+  score?: number;
+  motivo?: string;
+}) {
+  const cfg = CLASSIF_CONFIG[value ?? "pendente"];
+  return (
+    <div
+      className="flex items-center justify-between p-3 rounded-xl"
+      style={{ background: cfg.bg }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-lg">{cfg.emoji}</span>
+        <div>
+          <div className="text-sm font-medium" style={{ color: cfg.color }}>
+            Lead {cfg.label}
+          </div>
+          {motivo && (
+            <div className="text-xs mt-0.5" style={{ color: "var(--tm)" }}>
+              {motivo}
+            </div>
+          )}
+        </div>
+      </div>
+      {score != null && (
+        <div className="text-right">
+          <div className="text-2xl font-bold font-mono" style={{ color: cfg.color }}>
+            {score}
+          </div>
+          <div className="text-xs" style={{ color: "var(--tm)" }}>/100</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfiancaIcon({ value }: { value?: ConfiancaField }) {
+  if (!value || value === "desconhecida") return null;
+  if (value === "alta")  return <ShieldCheck  size={13} style={{ color: "#10b981" }} title="Confiança alta" />;
+  if (value === "media") return <ShieldAlert  size={13} style={{ color: "#f59e0b" }} title="Confiança média" />;
+  return                        <AlertCircle  size={13} style={{ color: "#ef4444" }} title="Confiança baixa" />;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function LeadModal({ company, onClose, onUpdate, onDelete }: LeadModalProps) {
-  const [editing, setEditing] = useState(false);
-  const [status, setStatus] = useState<CompanyStatus>(company.status);
-  const [notas, setNotas] = useState(company.notas ?? "");
-  const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [editing,        setEditing]        = useState(false);
+  const [status,         setStatus]         = useState<CompanyStatus>(company.status);
+  const [notas,          setNotas]          = useState(company.notas ?? "");
+  const [saving,         setSaving]         = useState(false);
+  const [confirmDelete,  setConfirmDelete]  = useState(false);
+  const [deleting,       setDeleting]       = useState(false);
 
-  const handleDelete = async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
-    setDeleting(true);
-    try {
-      await deleteLead(company.id);
-      onDelete?.(company.id);
-      onClose();
-    } catch (err) {
-      console.error(err);
-      setDeleting(false);
-      setConfirmDelete(false);
-    }
-  };
-
-  // Close on Escape
+  // Fechar com Escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
@@ -85,53 +128,55 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
     }
   };
 
+  const handleDelete = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setDeleting(true);
+    try {
+      await deleteLead(company.id);
+      onDelete?.(company.id);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop animate-fade-in"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
         className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border animate-slide-up"
         style={{
-          background: "var(--card)",
-          borderColor: "var(--border)",
-          boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+          background:   "var(--card)",
+          borderColor:  "var(--border)",
+          boxShadow:    "0 24px 64px rgba(0,0,0,0.6)",
         }}
       >
-        {/* Header */}
-        <div
-          className="flex items-start justify-between p-6 border-b"
-          style={{ borderColor: "var(--border)" }}
-        >
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between p-6 border-b" style={{ borderColor: "var(--border)" }}>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h2
-                className="font-display text-2xl tracking-wider truncate"
-                style={{ color: "var(--text)" }}
-              >
+              <h2 className="font-display text-2xl tracking-wider truncate" style={{ color: "var(--text)" }}>
                 {company.nome}
               </h2>
               <CompanyStatusBadge status={company.status} />
             </div>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               {company.nicho && (
-                <span className="text-xs" style={{ color: "var(--ts)" }}>
-                  {company.nicho}
-                </span>
+                <span className="text-xs" style={{ color: "var(--ts)" }}>{company.nicho}</span>
               )}
               {company.localidade && (
-                <span
-                  className="flex items-center gap-1 text-xs"
-                  style={{ color: "var(--tm)" }}
-                >
+                <span className="flex items-center gap-1 text-xs" style={{ color: "var(--tm)" }}>
                   <MapPin size={11} />
                   {company.localidade}
                 </span>
               )}
             </div>
           </div>
+
           <div className="flex items-center gap-2 ml-4 flex-shrink-0">
             {confirmDelete ? (
               <div className="flex items-center gap-2">
@@ -140,7 +185,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                   Apagar este lead?
                 </span>
                 <button
-                  className="px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+                  className="px-3 py-1 rounded-lg text-xs font-medium"
                   style={{ background: "#ef4444", color: "#fff" }}
                   onClick={handleDelete}
                   disabled={deleting}
@@ -161,27 +206,29 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                 onClick={handleDelete}
                 title="Apagar lead"
                 style={{ color: "var(--tm)" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
-                onMouseLeave={e => (e.currentTarget.style.color = "var(--tm)")}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--tm)")}
               >
                 <Trash2 size={16} />
               </button>
             )}
-            <button
-              className="btn-ghost p-2"
-              onClick={onClose}
-            >
+            <button className="btn-ghost p-2" onClick={onClose}>
               <X size={18} />
             </button>
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Scores */}
-          <div
-            className="rounded-xl p-4 flex items-center gap-6"
-            style={{ background: "var(--bg3)" }}
-          >
+        <div className="p-6 space-y-5">
+
+          {/* ── Classificação e Score de Qualidade — NOVO ── */}
+          <ClassificacaoBlock
+            value={company.classificacao_lead}
+            score={company.score_qualidade_lead}
+            motivo={company.motivo_descarte}
+          />
+
+          {/* ── Scores operacionais ── */}
+          <div className="rounded-xl p-4 flex items-center gap-6" style={{ background: "var(--bg3)" }}>
             <div className="flex items-center gap-4">
               <div className="text-center">
                 <ScoreCircle value={company.score_prioridade_sdr} size="lg" />
@@ -191,47 +238,34 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
               </div>
             </div>
             <div className="flex-1 space-y-2">
-              <ScoreBar
-                label="Maturidade Digital"
-                value={company.score_maturidade_digital}
-              />
-              <ScoreBar
-                label="Oportunidade"
-                value={company.score_oportunidade_comercial}
-                color="#f59e0b"
-              />
-              <ScoreBar
-                label="Prioridade SDR"
-                value={company.score_prioridade_sdr}
-                color="var(--orange)"
-              />
+              <ScoreBar label="Maturidade Digital" value={company.score_maturidade_digital} />
+              <ScoreBar label="Oportunidade" value={company.score_oportunidade_comercial} color="#f59e0b" />
+              <ScoreBar label="Prioridade SDR" value={company.score_prioridade_sdr} color="var(--orange)" />
             </div>
           </div>
 
-          {/* Contact info */}
+          {/* ── Contactos ── */}
           <div className="grid grid-cols-2 gap-3">
             {company.telefone && (
               <a
                 href={`tel:${company.telefone}`}
-                className="flex items-center gap-2.5 p-3 rounded-lg transition-colors"
+                className="flex items-center gap-2.5 p-3 rounded-lg"
                 style={{ background: "var(--bg3)" }}
               >
                 <Phone size={15} style={{ color: "var(--orange)" }} />
-                <span className="text-sm" style={{ color: "var(--text)" }}>
-                  {company.telefone}
-                </span>
+                <span className="text-sm flex-1" style={{ color: "var(--text)" }}>{company.telefone}</span>
+                <ConfiancaIcon value={company.confianca_telefone} />
               </a>
             )}
             {company.email && (
               <a
                 href={`mailto:${company.email}`}
-                className="flex items-center gap-2.5 p-3 rounded-lg transition-colors"
+                className="flex items-center gap-2.5 p-3 rounded-lg"
                 style={{ background: "var(--bg3)" }}
               >
                 <Mail size={15} style={{ color: "var(--orange)" }} />
-                <span className="text-sm truncate" style={{ color: "var(--text)" }}>
-                  {company.email}
-                </span>
+                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>{company.email}</span>
+                <ConfiancaIcon value={company.confianca_email} />
               </a>
             )}
             {company.website && (
@@ -239,13 +273,11 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                 href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2.5 p-3 rounded-lg transition-colors col-span-2"
+                className="flex items-center gap-2.5 p-3 rounded-lg col-span-2"
                 style={{ background: "var(--bg3)" }}
               >
                 <Globe size={15} style={{ color: "var(--orange)" }} />
-                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>
-                  {company.website}
-                </span>
+                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>{company.website}</span>
                 <ExternalLink size={12} style={{ color: "var(--tm)" }} />
               </a>
             )}
@@ -254,7 +286,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                 href={company.instagram.startsWith("http") ? company.instagram : `https://instagram.com/${company.instagram.replace(/^@/, "")}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2.5 p-3 rounded-lg transition-colors"
+                className="flex items-center gap-2.5 p-3 rounded-lg"
                 style={{ background: "var(--bg3)" }}
               >
                 <Instagram size={15} style={{ color: "#e1306c" }} />
@@ -269,13 +301,11 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                 href={company.linkedin.startsWith("http") ? company.linkedin : `https://linkedin.com/company/${company.linkedin}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2.5 p-3 rounded-lg transition-colors"
+                className="flex items-center gap-2.5 p-3 rounded-lg"
                 style={{ background: "var(--bg3)" }}
               >
                 <Linkedin size={15} style={{ color: "#0077b5" }} />
-                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>
-                  LinkedIn
-                </span>
+                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>LinkedIn</span>
                 <ExternalLink size={12} style={{ color: "var(--tm)" }} />
               </a>
             )}
@@ -293,38 +323,50 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
             )}
           </div>
 
-          {/* Digital presence */}
+          {/* ── Presença digital ── */}
           <DigitalPresence company={company} />
 
-          {/* Edit status & notes */}
+          {/* ── Fontes encontradas — NOVO ── */}
+          {company.fontes_encontradas && company.fontes_encontradas.length > 0 && (
+            <div
+              className="flex items-start gap-3 p-3 rounded-xl"
+              style={{ background: "var(--bg3)" }}
+            >
+              <Layers size={14} className="flex-shrink-0 mt-0.5" style={{ color: "var(--tm)" }} />
+              <div>
+                <div className="text-xs font-medium mb-1" style={{ color: "var(--ts)" }}>
+                  Fontes de dados
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {company.fontes_encontradas.map((f) => (
+                    <span
+                      key={f}
+                      className="px-2 py-0.5 rounded-full text-xs"
+                      style={{ background: "var(--card)", color: "var(--ts)" }}
+                    >
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Edição CRM ── */}
           <div
             className="rounded-xl p-4 border"
-            style={{
-              background: "var(--bg3)",
-              borderColor: "var(--border)",
-            }}
+            style={{ background: "var(--bg3)", borderColor: "var(--border)" }}
           >
             <div className="flex items-center justify-between mb-3">
               <span className="label">CRM</span>
               {!editing ? (
-                <button
-                  className="btn-ghost py-1 px-2 text-xs"
-                  onClick={() => setEditing(true)}
-                >
+                <button className="btn-ghost py-1 px-2 text-xs" onClick={() => setEditing(true)}>
                   <Edit3 size={13} />
                   Editar
                 </button>
               ) : (
-                <button
-                  className="btn-primary py-1 px-3 text-xs"
-                  onClick={handleSave}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Save size={13} />
-                  )}
+                <button className="btn-primary py-1 px-3 text-xs" onClick={handleSave} disabled={saving}>
+                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                   Guardar
                 </button>
               )}
@@ -340,9 +382,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                     onChange={(e) => setStatus(e.target.value as CompanyStatus)}
                   >
                     {STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
                 </div>
@@ -360,29 +400,29 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs" style={{ color: "var(--tm)" }}>
-                    Status:
-                  </span>
+                  <span className="text-xs" style={{ color: "var(--tm)" }}>Status:</span>
                   <CompanyStatusBadge status={company.status} />
                 </div>
                 {company.notas && (
-                  <p className="text-sm" style={{ color: "var(--ts)" }}>
-                    {company.notas}
-                  </p>
+                  <p className="text-sm" style={{ color: "var(--ts)" }}>{company.notas}</p>
                 )}
               </div>
             )}
           </div>
 
-          {/* Metadata */}
+          {/* ── Metadata ── */}
           <div
-            className="flex items-center justify-between text-xs"
+            className="flex items-center justify-between text-xs flex-wrap gap-2"
             style={{ color: "var(--tm)" }}
           >
-            <span>Fonte: {company.fonte ?? "Páginas Amarelas"}</span>
+            <span>Fonte: {company.fonte ?? "—"}</span>
+            {company.ultima_validacao && (
+              <span>
+                Validado: {new Date(company.ultima_validacao).toLocaleDateString("pt-PT")}
+              </span>
+            )}
             <span>
-              Adicionado:{" "}
-              {new Date(company.data_criacao).toLocaleDateString("pt-PT")}
+              Adicionado: {new Date(company.data_criacao).toLocaleDateString("pt-PT")}
             </span>
           </div>
         </div>

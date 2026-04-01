@@ -5,14 +5,12 @@ import type {
   StatsResponse,
   SearchParams,
   CompanyStatus,
+  LeadClassificacao,
 } from "./types";
 
 const API_BASE = "/api";
 
-async function request<T>(
-  path: string,
-  options?: RequestInit
-): Promise<T> {
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -35,11 +33,14 @@ export async function getLeads(params: {
   page?: number;
   per_page?: number;
   status?: CompanyStatus;
+  classificacao?: LeadClassificacao;  // NOVO
   nicho?: string;
   localidade?: string;
   search?: string;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
+  sem_email?: string;                 // NOVO: "1" para filtrar leads sem email
+  sem_telefone?: string;              // NOVO: "1" para filtrar leads sem telefone
 }): Promise<LeadsResponse> {
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -69,6 +70,7 @@ export async function deleteLead(id: string): Promise<void> {
 
 export async function exportLeads(params: {
   status?: CompanyStatus;
+  classificacao?: LeadClassificacao;  // NOVO
   nicho?: string;
   localidade?: string;
 }): Promise<Blob> {

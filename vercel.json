@@ -6,6 +6,7 @@
     "api/leads.py": { "maxDuration": 30 },
     "api/jobs.py": { "maxDuration": 60 },
     "api/stats.py": { "maxDuration": 30 },
+    "api/purge.py": { "maxDuration": 30 },
     "api/leads/export.py": { "maxDuration": 30 },
     "api/leads/[id].py": { "maxDuration": 30 },
     "api/jobs/[id].py": { "maxDuration": 30 },

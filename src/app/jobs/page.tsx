@@ -169,18 +169,24 @@ function JobCard({
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-2">
         <div className="text-center p-2.5 rounded-lg" style={{ background: "var(--bg3)" }}>
           <div className="text-lg font-display tracking-wider" style={{ color: "var(--text)" }}>
             {job.total_encontrados}
           </div>
-          <div className="text-xs" style={{ color: "var(--tm)" }}>Leads</div>
+          <div className="text-xs" style={{ color: "var(--tm)" }}>Total</div>
         </div>
-        <div className="text-center p-2.5 rounded-lg" style={{ background: "var(--bg3)" }}>
-          <div className="text-lg font-display tracking-wider" style={{ color: "var(--text)" }}>
-            {job.max_resultados}
+        <div className="text-center p-2.5 rounded-lg" style={{ background: "rgba(16,185,129,0.08)" }}>
+          <div className="text-lg font-display tracking-wider" style={{ color: "#10b981" }}>
+            {job.total_validos ?? "—"}
           </div>
-          <div className="text-xs" style={{ color: "var(--tm)" }}>Limite</div>
+          <div className="text-xs" style={{ color: "var(--tm)" }}>Válidos</div>
+        </div>
+        <div className="text-center p-2.5 rounded-lg" style={{ background: "rgba(239,68,68,0.08)" }}>
+          <div className="text-lg font-display tracking-wider" style={{ color: "#f87171" }}>
+            {job.total_descartados ?? "—"}
+          </div>
+          <div className="text-xs" style={{ color: "var(--tm)" }}>Lixo</div>
         </div>
         <div className="text-center p-2.5 rounded-lg" style={{ background: "var(--bg3)" }}>
           <div className="text-lg font-display tracking-wider" style={{ color: "var(--text)" }}>

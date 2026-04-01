@@ -261,7 +261,7 @@ export default function Dashboard() {
                 </datalist>
               </div>
 
-              {/* Max resultados */}
+              {/* Max resultados — CORRIGIDO: aumentado para 200 */}
               <div>
                 <label className="label mb-1.5 block">
                   <BarChart3 size={11} className="inline mr-1" />
@@ -275,7 +275,7 @@ export default function Dashboard() {
                   <option value={20}>20 empresas</option>
                   <option value={50}>50 empresas</option>
                   <option value={100}>100 empresas</option>
-                  <option value={200}>200 empresas</option>
+                  <option value={200}>200 empresas (máx.)</option>
                 </select>
               </div>
             </div>

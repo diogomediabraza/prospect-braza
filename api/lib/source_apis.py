@@ -23,8 +23,11 @@ def _get(url: str, headers: Optional[dict] = None, timeout: int = 15) -> Optiona
     })
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read().decode("utf-8", errors="replace"))
-    except Exception:
+            data = json.loads(r.read().decode("utf-8", errors="replace"))
+            print(f"[API] OK {url[:80]}", flush=True)
+            return data
+    except Exception as e:
+        print(f"[API] FAILED {url[:80]}: {type(e).__name__}: {e}", flush=True)
         return None
 
 

@@ -6,6 +6,20 @@ export type CompanyStatus =
   | "descartado"
   | "nao_contactar";
 
+// NOVO: classificação automática de qualidade do lead
+export type LeadClassificacao =
+  | "excelente"
+  | "bom"
+  | "fraco"
+  | "lixo"
+  | "pendente";
+
+export type ConfiancaField =
+  | "alta"
+  | "media"
+  | "baixa"
+  | "desconhecida";
+
 export type JobStatus =
   | "pendente"
   | "a_correr"
@@ -15,6 +29,7 @@ export type JobStatus =
 
 export interface Company {
   id: string;
+  job_id?: string;       // NOVO: FK para o job que gerou este lead
   nome: string;
   nicho?: string;
   localidade?: string;
@@ -35,12 +50,14 @@ export interface Company {
   youtube?: string;
   tiktok?: string;
 
-  // Intelligence
+  // Intelligence flags
   tem_website: boolean;
   tem_loja_online: boolean;
   tem_facebook: boolean;
   tem_instagram: boolean;
   tem_linkedin: boolean;
+  tem_youtube?: boolean;
+  tem_tiktok?: boolean;
   tem_google_ads: boolean;
   tem_facebook_ads: boolean;
   tem_gtm: boolean;
@@ -48,11 +65,20 @@ export interface Company {
   tem_pixel_meta: boolean;
 
   // Scores
-  score_maturidade_digital?: number;
-  score_oportunidade_comercial?: number;
-  score_prioridade_sdr?: number;
+  score_qualidade_lead?: number;          // NOVO: 0-100
+  score_maturidade_digital?: number;      // 0-10
+  score_oportunidade_comercial?: number;  // 0-10
+  score_prioridade_sdr?: number;          // 0-10
 
-  // Status
+  // Qualidade (NOVO)
+  classificacao_lead?: LeadClassificacao;
+  motivo_descarte?: string;
+  confianca_email?: ConfiancaField;
+  confianca_telefone?: ConfiancaField;
+  fontes_encontradas?: string[];
+  ultima_validacao?: string;
+
+  // CRM status
   status: CompanyStatus;
   notas?: string;
 
@@ -70,6 +96,9 @@ export interface Job {
   status: JobStatus;
   progresso: number;
   total_encontrados: number;
+  total_validos?: number;      // NOVO
+  total_descartados?: number;  // NOVO
+  logs_resumidos?: string;     // NOVO
   mensagem_erro?: string;
   data_inicio: string;
   data_fim?: string;
@@ -93,6 +122,9 @@ export interface StatsResponse {
   leads_com_website: number;
   leads_com_instagram: number;
   leads_sem_presenca_digital: number;
+  leads_excelentes?: number;    // NOVO
+  leads_bons?: number;          // NOVO
   jobs_ativos: number;
   media_score_oportunidade: number;
+  media_score_qualidade?: number; // NOVO
 }
