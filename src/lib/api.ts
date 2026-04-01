@@ -61,14 +61,14 @@ export async function getLeads(params: {
   const res = await request<LeadsResponse>(`/leads?${qs}`);
   // Sanitize "None" strings from backend Python str(None) bug
   if (res.leads) {
-    res.leads = res.leads.map((l) => sanitizeCompany(l as Record<string, unknown>) as unknown as Company);
+    res.leads = res.leads.map((l) => sanitizeCompany(l as unknown as Record<string, unknown>) as unknown as Company);
   }
   return res;
 }
 
 export async function getLead(id: string): Promise<Company> {
   const lead = await request<Company>(`/leads/${id}`);
-  return sanitizeCompany(lead as Record<string, unknown>) as unknown as Company;
+  return sanitizeCompany(lead as unknown as Record<string, unknown>) as unknown as Company;
 }
 
 export async function updateLeadStatus(
