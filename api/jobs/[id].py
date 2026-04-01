@@ -43,6 +43,7 @@ class handler(BaseHTTPRequestHandler):
             if not job:
                 status, headers, body = error_response("Job não encontrado", 404)
             else:
+                sb_delete("companies", {"job_id": f"eq.{job_id}"})
                 sb_delete("jobs", {"id": f"eq.{job_id}"})
                 status, headers, body = json_response({"deleted": True, "id": job_id})
         except Exception as e:
