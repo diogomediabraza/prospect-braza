@@ -36,6 +36,15 @@ _EMPTY_PRESENCE = {
     "confianca_email": "desconhecida", "confianca_telefone": "desconhecida",
 }
 
+_EMPTY_PRESENCE = {
+    "tem_website": False, "tem_loja_online": False,
+    "tem_gtm": False, "tem_ga4": False,
+    "tem_pixel_meta": False, "tem_google_ads": False,
+    "tem_facebook_ads": False,
+    "tem_instagram": False, "tem_facebook": False, "tem_linkedin": False,
+    "instagram": None, "facebook": None, "linkedin": None,
+    "email": None, "telefone": None,
+}
 
 def _enrich(company: dict) -> dict:
     """Worker: fetch digital presence for one company. Returns presence dict."""

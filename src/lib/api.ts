@@ -46,11 +46,17 @@ export async function getLeads(params: {
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== "") qs.set(k, String(v));
   });
-  return request(`/leads?${qs}`);
+  const res = await request<LeadsResponse>(`/leads?${qs}`);
+  // Sanitize "None" strings from backend Python str(None) bug
+  if (res.leads) {
+    res.leads = res.leads.map((l) => sanitizeCompany(l as unknown as Record<string, unknown>) as unknown as Company);
+  }
+  return res;
 }
 
 export async function getLead(id: string): Promise<Company> {
-  return request(`/leads/${id}`);
+  const lead = await request<Company>(`/leads/${id}`);
+  return sanitizeCompany(lead as unknown as Record<string, unknown>) as unknown as Company;
 }
 
 export async function updateLeadStatus(

@@ -137,12 +137,13 @@ def _build_query(nicho: str, bbox: tuple, limit: int) -> str:
     parts.append(f'  node["name"~"{nicho_lower}",i]({bb});')
     parts.append(f'  way["name"~"{nicho_lower}",i]({bb});')
 
+    out_limit = min(limit * 3, 200)
     return (
-        f'[out:json][timeout:25];\n'
+        f'[out:json][timeout:15];\n'
         f'(\n'
         + "\n".join(parts) +
         f'\n);\n'
-        f'out center {limit * 3};\n'
+        f'out center {out_limit};\n'
     )
 
 
@@ -260,6 +261,7 @@ def scrape_paginas_amarelas(nicho: str, localidade: str, max_results: int = 50) 
     if not bbox:
         print(f"[OSM] Geocode failed for '{localidade}'", flush=True)
         return []
+    print(f"[OSM] Geocode OK for '{localidade}': bbox={bbox}")
 
     print(f"[OSM] Geocoded '{localidade}' -> bbox={bbox}", flush=True)
     query = _build_query(nicho, bbox, max_results)
@@ -267,6 +269,7 @@ def scrape_paginas_amarelas(nicho: str, localidade: str, max_results: int = 50) 
     body  = _fetch(OVERPASS_URL, data=data, timeout=25)
 
     if not body:
+        print("[OSM] All Overpass servers failed — empty body")
         return []
 
     try:
