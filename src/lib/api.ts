@@ -9,6 +9,19 @@ import type {
 
 const API_BASE = "/api";
 
+/** Sanitize backend data: convert "None" strings and empty strings to null */
+function sanitizeCompany(c: Record<string, unknown>): Record<string, unknown> {
+  const contactFields = ["telefone", "telefone2", "email", "website", "instagram",
+    "facebook", "linkedin", "youtube", "tiktok", "morada", "codigo_postal"];
+  for (const f of contactFields) {
+    const v = c[f];
+    if (typeof v === "string" && (!v.trim() || v.trim().toLowerCase() === "none")) {
+      c[f] = null;
+    }
+  }
+  return c;
+}
+
 async function request<T>(
   path: string,
   options?: RequestInit
@@ -45,11 +58,17 @@ export async function getLeads(params: {
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== "") qs.set(k, String(v));
   });
-  return request(`/leads?${qs}`);
+  const res = await request<LeadsResponse>(`/leads?${qs}`);
+  // Sanitize "None" strings from backend Python str(None) bug
+  if (res.leads) {
+    res.leads = res.leads.map((l) => sanitizeCompany(l as Record<string, unknown>) as unknown as Company);
+  }
+  return res;
 }
 
 export async function getLead(id: string): Promise<Company> {
-  return request(`/leads/${id}`);
+  const lead = await request<Company>(`/leads/${id}`);
+  return sanitizeCompany(lead as Record<string, unknown>) as unknown as Company;
 }
 
 export async function updateLeadStatus(
