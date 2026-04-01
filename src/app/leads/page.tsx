@@ -246,7 +246,7 @@ function LeadsPageInner() {
     if (!confirm(`Apagar ${selected.size} lead(s) seleccionados? Esta acção é irreversível.`)) return;
     setBulkDeleting(true);
     try {
-      await Promise.all([...selected].map((id) => deleteLead(id)));
+      await Promise.all(Array.from(selected).map((id) => deleteLead(id)));
       setLeads((prev) => prev.filter((l) => !selected.has(l.id)));
       setTotal((prev) => prev - selected.size);
       setSelected(new Set());

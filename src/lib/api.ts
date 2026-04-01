@@ -10,6 +10,15 @@ import type {
 
 const API_BASE = "/api";
 
+/** Strip Python str(None) → null for all string fields */
+function sanitizeCompany(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    result[k] = v === "None" ? null : v;
+  }
+  return result;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {

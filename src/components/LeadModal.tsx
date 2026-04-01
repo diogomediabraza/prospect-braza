@@ -93,9 +93,9 @@ function ClassificacaoBlock({ value, score, motivo }: {
 
 function ConfiancaIcon({ value }: { value?: ConfiancaField }) {
   if (!value || value === "desconhecida") return null;
-  if (value === "alta")  return <ShieldCheck  size={13} style={{ color: "#10b981" }} title="Confiança alta" />;
-  if (value === "media") return <ShieldAlert  size={13} style={{ color: "#f59e0b" }} title="Confiança média" />;
-  return                        <AlertCircle  size={13} style={{ color: "#ef4444" }} title="Confiança baixa" />;
+  if (value === "alta")  return <ShieldCheck  size={13} style={{ color: "#10b981" }} aria-label="Confiança alta" />;
+  if (value === "media") return <ShieldAlert  size={13} style={{ color: "#f59e0b" }} aria-label="Confiança média" />;
+  return                        <AlertCircle  size={13} style={{ color: "#ef4444" }} aria-label="Confiança baixa" />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
