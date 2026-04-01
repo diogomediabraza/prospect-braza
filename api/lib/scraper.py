@@ -12,7 +12,10 @@ import urllib.parse
 from typing import Optional
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+]
 
 # Map common Portuguese niche keywords to OSM tags
 NICHO_TAGS = {
@@ -127,21 +130,23 @@ def _build_query(nicho: str, bbox: tuple, limit: int) -> str:
 
     parts = []
 
-    # Tag-based search (most reliable â finds all businesses of that type)
-    for k, v in tags:
-        parts.append(f'  node["{k}"="{v}"]["name"]({bb});')
-        parts.append(f'  way["{k}"="{v}"]["name"]({bb});')
+    if tags:
+        # Tag-based search only â fast and reliable for known niches
+        for k, v in tags:
+            parts.append(f'  node["{k}"="{v}"]["name"]({bb});')
+            parts.append(f'  way["{k}"="{v}"]["name"]({bb});')
+    else:
+        # Name-based regex for unknown niches (slower, but only fallback)
+        parts.append(f'  node["name"~"{nicho_lower}",i]({bb});')
+        parts.append(f'  way["name"~"{nicho_lower}",i]({bb});')
 
-    # Name-based search (catches businesses with the keyword in their name)
-    parts.append(f'  node["name"~"{nicho_lower}",i]({bb});')
-    parts.append(f'  way["name"~"{nicho_lower}",i]({bb});')
-
+    out_limit = min(limit * 3, 200)
     return (
-        f'[out:json][timeout:25];\n'
+        f'[out:json][timeout:15];\n'
         f'(\n'
         + "\n".join(parts) +
         f'\n);\n'
-        f'out center {limit * 3};\n'
+        f'out center {out_limit};\n'
     )
 
 
@@ -252,11 +257,19 @@ def scrape_paginas_amarelas(
 
     query = _build_query(nicho, bbox, max_results)
     print(f"[OSM] Overpass query:\n{query}")
-    data = urllib.parse.urlencode({"data": query}).encode("utf-8")
-    body = _fetch(OVERPASS_URL, data=data, timeout=25)
+    encoded = urllib.parse.urlencode({"data": query}).encode("utf-8")
+
+    body = ""
+    for server_url in OVERPASS_URLS:
+        print(f"[OSM] Trying server: {server_url}")
+        body = _fetch(server_url, data=encoded, timeout=20)
+        if body:
+            print(f"[OSM] Got response from {server_url}")
+            break
+        print(f"[OSM] Server {server_url} failed, trying next...")
 
     if not body:
-        print("[OSM] Overpass returned empty body")
+        print("[OSM] All Overpass servers failed â empty body")
         return []
 
     try:
