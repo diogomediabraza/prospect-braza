@@ -273,9 +273,8 @@ export default function Dashboard() {
                   onChange={(e) => setMaxResultados(Number(e.target.value))}
                 >
                   <option value={20}>20 empresas</option>
-                  <option value={50}>50 empresas</option>
-                  <option value={100}>100 empresas</option>
-                  <option value={200}>200 empresas</option>
+                  <option value={30}>30 empresas</option>
+                  <option value={50}>50 empresas (máx.)</option>
                 </select>
               </div>
             </div>
@@ -539,4 +538,5 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
 }
