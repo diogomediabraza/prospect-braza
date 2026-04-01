@@ -212,4 +212,3 @@ class handler(BaseHTTPRequestHandler):
             status, headers, body = error_response(str(e), 500)
 
         send_response(self, status, headers, body)
-        send_response(self, status, headers, body)
