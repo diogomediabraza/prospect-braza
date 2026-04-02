@@ -209,150 +209,130 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
 
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": 10})
 
-        # ── ETAPA 2: Enriquecimento paralelo ──────────────────────────────────
-        # Deadline: reserva 30s para scoring/inserção + margem até ao kill do Vercel
-        enrich_deadline = t_start + (_JOB_BUDGET - 30)
-        log(f"[JOB {job_id[:8]}] Etapa 2: Enriquecimento paralelo de {total} candidatos (deadline em {int(enrich_deadline - time.time())}s)...")
-        presence_map: dict = {}
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {}
-            for i, company in enumerate(raw_companies):
-                # Para de submeter novo trabalho se o orçamento de tempo esgotou
-                if time.time() >= enrich_deadline:
-                    log(f"[JOB {job_id[:8]}] Deadline atingido ao submeter — {i}/{total} empresas enriquecidas")
-                    break
-                futures[executor.submit(_enrich, company)] = i
-
-            done = 0
-            remaining = max(5.0, enrich_deadline - time.time())
-            try:
-                for future in as_completed(futures, timeout=remaining):
-                    i = futures[future]
-                    try:
-                        presence_map[i] = future.result()
-                    except Exception:
-                        presence_map[i] = dict(_EMPTY_PRESENCE)
-                    done += 1
-                    progress = 10 + int((done / len(futures)) * 70)
-                    sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": progress})
-            except Exception:
-                # TimeoutError ou outro — guarda o que já temos
-                log(f"[JOB {job_id[:8]}] Timeout no enriquecimento — {done}/{len(futures)} concluídos")
-
-        sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": 85})
-
-        # ── ETAPA 3: Classificação e inserção ─────────────────────────────────
-        log(f"[JOB {job_id[:8]}] Etapa 3: Score, classificação e inserção...")
+        # ── ETAPAS 2+3 unificadas: enriquecer → classificar → inserir de imediato ──
+        # Cada empresa é inserida assim que fica pronta, sem esperar pelas outras.
+        # Se a função for morta pelo Vercel, os leads já inseridos ficam guardados.
+        enrich_deadline = t_start + (_JOB_BUDGET - 8)   # reserva 8s para overhead final
+        log(f"[JOB {job_id[:8]}] Etapa 2+3: enriquecer+inserir {total} candidatos (deadline em {int(enrich_deadline - time.time())}s)...")
         inserted    = 0
         descartados = 0
+        done        = 0
 
-        for i, company in enumerate(raw_companies):
-            try:
-                presence = presence_map.get(i, dict(_EMPTY_PRESENCE))
-                fonte    = company.get("fonte_raw", "OSM Overpass")
-                fontes   = company.get("_fontes", [fonte])
+        def _score_and_insert(company: dict, presence: dict) -> bool:
+            """Classifica e insere imediatamente. Devolve True se inserido."""
+            nonlocal inserted, descartados
+            fonte  = company.get("fonte_raw", "OSM Overpass")
+            fontes = company.get("_fontes", [fonte])
 
-                full_data = {
-                    **company,
-                    **presence,
-                    "nicho":      company.get("nicho", nicho),
-                    "localidade": company.get("localidade", localidade),
-                    "status":     "novo",
-                    "fonte":      fonte,
-                }
+            full_data = {
+                **company, **presence,
+                "nicho": company.get("nicho", nicho),
+                "localidade": company.get("localidade", localidade),
+                "status": "novo", "fonte": fonte,
+            }
+            for field in ("email", "telefone", "instagram", "facebook", "linkedin"):
+                original = company.get(field)
+                if original and str(original).strip():
+                    full_data[field] = original
 
-                # Dados originais da fonte têm prioridade sobre os extraídos do site
-                for field in ("email", "telefone", "instagram", "facebook", "linkedin"):
-                    original = company.get(field)
-                    if original and str(original).strip():
-                        full_data[field] = original
+            fonte_lower = fonte.lower()
+            if any(f in fonte_lower for f in ("foursquare", "here places", "google places", "osm")):
+                if full_data.get("telefone"):
+                    full_data["confianca_telefone"] = "alta"
 
-                # Garantir que confiança do telefone é 'alta' se veio de API
-                fonte_lower = fonte.lower()
-                if any(f in fonte_lower for f in ("foursquare", "here places", "google places", "osm")):
-                    if full_data.get("telefone"):
-                        full_data["confianca_telefone"] = "alta"
+            full_data.setdefault("tem_facebook",  bool(full_data.get("facebook")))
+            full_data.setdefault("tem_instagram", bool(full_data.get("instagram")))
+            full_data.setdefault("tem_linkedin",  bool(full_data.get("linkedin")))
+            full_data.setdefault("tem_youtube",   False)
+            full_data.setdefault("tem_tiktok",    False)
+            full_data.setdefault("instagram",     None)
+            full_data.setdefault("facebook",      None)
+            full_data.setdefault("linkedin",      None)
 
-                full_data.setdefault("tem_facebook",  bool(full_data.get("facebook")))
-                full_data.setdefault("tem_instagram", bool(full_data.get("instagram")))
-                full_data.setdefault("tem_linkedin",  bool(full_data.get("linkedin")))
-                full_data.setdefault("tem_youtube",   False)
-                full_data.setdefault("tem_tiktok",    False)
-                full_data.setdefault("instagram",     None)
-                full_data.setdefault("facebook",      None)
-                full_data.setdefault("linkedin",      None)
+            scores = calculate_scores(full_data)
+            full_data.update(scores)
+            classificacao, motivo_descarte = classify_lead(full_data)
 
-                # Calcular scores
-                scores = calculate_scores(full_data)
-                full_data.update(scores)
+            if classificacao not in _QUALIDADE_MINIMA:
+                descartados += 1
+                return False
 
-                # Classificar o lead
-                classificacao, motivo_descarte = classify_lead(full_data)
+            if inserted >= max_results:
+                return False
 
-                # Apenas 'bom' e 'excelente' são inseridos — 'fraco' e 'lixo' descartados
-                if classificacao not in _QUALIDADE_MINIMA:
-                    descartados += 1
-                    motivo = motivo_descarte or f"Score insuficiente ({full_data.get('score_qualidade_lead', 0)}/100 — {classificacao})"
-                    log(f"[DESCARTADO/{classificacao.upper()}] '{full_data.get('nome', '?')}': {motivo}")
-                    continue
+            fontes_array = fontes if isinstance(fontes, list) else [fontes]
+            row = {
+                "id":                           str(uuid.uuid4()),
+                "job_id":                       job_id,
+                "nome":                         str(full_data.get("nome", ""))[:255],
+                "nicho":                        str(full_data.get("nicho", ""))[:100],
+                "localidade":                   str(full_data.get("localidade", ""))[:100],
+                "morada":                       str(full_data.get("morada", ""))[:255],
+                "codigo_postal":                str(full_data.get("codigo_postal", ""))[:20],
+                "telefone":                     str(full_data.get("telefone", ""))[:50],
+                "email":                        str(full_data.get("email", ""))[:255],
+                "website":                      str(full_data.get("website", ""))[:255],
+                "instagram":                    str(full_data.get("instagram") or "")[:255] or None,
+                "facebook":                     str(full_data.get("facebook") or "")[:255] or None,
+                "linkedin":                     str(full_data.get("linkedin") or "")[:255] or None,
+                "tem_website":                  bool(full_data.get("tem_website")),
+                "tem_loja_online":              bool(full_data.get("tem_loja_online")),
+                "tem_facebook":                 bool(full_data.get("tem_facebook")),
+                "tem_instagram":                bool(full_data.get("tem_instagram")),
+                "tem_linkedin":                 bool(full_data.get("tem_linkedin")),
+                "tem_youtube":                  bool(full_data.get("tem_youtube")),
+                "tem_tiktok":                   bool(full_data.get("tem_tiktok")),
+                "tem_google_ads":               bool(full_data.get("tem_google_ads")),
+                "tem_facebook_ads":             bool(full_data.get("tem_facebook_ads")),
+                "tem_gtm":                      bool(full_data.get("tem_gtm")),
+                "tem_ga4":                      bool(full_data.get("tem_ga4")),
+                "tem_pixel_meta":               bool(full_data.get("tem_pixel_meta")),
+                "score_qualidade_lead":         full_data.get("score_qualidade_lead", 0),
+                "score_maturidade_digital":     full_data.get("score_maturidade_digital"),
+                "score_oportunidade_comercial": full_data.get("score_oportunidade_comercial"),
+                "score_prioridade_sdr":         full_data.get("score_prioridade_sdr"),
+                "classificacao_lead":           classificacao,
+                "motivo_descarte":              motivo_descarte,
+                "confianca_email":              full_data.get("confianca_email", "desconhecida"),
+                "confianca_telefone":           full_data.get("confianca_telefone", "desconhecida"),
+                "fontes_encontradas":           fontes_array,
+                "ultima_validacao":             datetime.now(timezone.utc).isoformat(),
+                "status":                       "novo",
+                "fonte":                        fonte,
+            }
+            sb_insert("companies", row, on_conflict="nome,localidade", ignore_duplicates=True)
+            inserted += 1
+            return True
 
-                # Já atingiu o número pedido — para de inserir
-                if inserted >= max_results:
-                    log(f"[JOB {job_id[:8]}] {max_results} leads de qualidade atingidos — a parar.")
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_company = {}
+            for i, company in enumerate(raw_companies):
+                if time.time() >= enrich_deadline or inserted >= max_results:
                     break
+                future_to_company[executor.submit(_enrich, company)] = company
 
-                # Construir row com todos os campos novos
-                fontes_array = fontes if isinstance(fontes, list) else [fontes]
+            remaining = max(3.0, enrich_deadline - time.time())
+            try:
+                for future in as_completed(future_to_company, timeout=remaining):
+                    if inserted >= max_results:
+                        break
+                    company = future_to_company[future]
+                    try:
+                        presence = future.result()
+                    except Exception:
+                        presence = dict(_EMPTY_PRESENCE)
+                    try:
+                        _score_and_insert(company, presence)
+                    except Exception as ex:
+                        log(f"[ERRO] {company.get('nome','?')}: {ex}")
+                    done += 1
+                    progress = 10 + int((done / max(len(future_to_company), 1)) * 85)
+                    sb_update("jobs", {"id": f"eq.{job_id}"},
+                              {"progresso": progress, "total_validos": inserted})
+            except Exception:
+                log(f"[JOB {job_id[:8]}] Timeout — {done} processados, {inserted} inseridos")
 
-                row = {
-                    "id":                           str(uuid.uuid4()),
-                    "job_id":                       job_id,           # NOVO: FK
-                    "nome":                         str(full_data.get("nome", ""))[:255],
-                    "nicho":                        str(full_data.get("nicho", ""))[:100],
-                    "localidade":                   str(full_data.get("localidade", ""))[:100],
-                    "morada":                       str(full_data.get("morada", ""))[:255],
-                    "codigo_postal":                str(full_data.get("codigo_postal", ""))[:20],
-                    "telefone":                     str(full_data.get("telefone", ""))[:50],
-                    "email":                        str(full_data.get("email", ""))[:255],
-                    "website":                      str(full_data.get("website", ""))[:255],
-                    "instagram":                    str(full_data.get("instagram") or "")[:255] or None,
-                    "facebook":                     str(full_data.get("facebook") or "")[:255] or None,
-                    "linkedin":                     str(full_data.get("linkedin") or "")[:255] or None,
-                    "tem_website":                  bool(full_data.get("tem_website")),
-                    "tem_loja_online":              bool(full_data.get("tem_loja_online")),
-                    "tem_facebook":                 bool(full_data.get("tem_facebook")),
-                    "tem_instagram":                bool(full_data.get("tem_instagram")),
-                    "tem_linkedin":                 bool(full_data.get("tem_linkedin")),
-                    "tem_youtube":                  bool(full_data.get("tem_youtube")),
-                    "tem_tiktok":                   bool(full_data.get("tem_tiktok")),
-                    "tem_google_ads":               bool(full_data.get("tem_google_ads")),
-                    "tem_facebook_ads":             bool(full_data.get("tem_facebook_ads")),
-                    "tem_gtm":                      bool(full_data.get("tem_gtm")),
-                    "tem_ga4":                      bool(full_data.get("tem_ga4")),
-                    "tem_pixel_meta":               bool(full_data.get("tem_pixel_meta")),
-                    "score_qualidade_lead":         full_data.get("score_qualidade_lead", 0),     # NOVO
-                    "score_maturidade_digital":     full_data.get("score_maturidade_digital"),
-                    "score_oportunidade_comercial": full_data.get("score_oportunidade_comercial"),
-                    "score_prioridade_sdr":         full_data.get("score_prioridade_sdr"),
-                    "classificacao_lead":           classificacao,                                 # NOVO
-                    "motivo_descarte":              motivo_descarte,                              # NOVO
-                    "confianca_email":              full_data.get("confianca_email", "desconhecida"),  # NOVO
-                    "confianca_telefone":           full_data.get("confianca_telefone", "desconhecida"),  # NOVO
-                    "fontes_encontradas":           fontes_array,                                 # NOVO
-                    "ultima_validacao":             datetime.now(timezone.utc).isoformat(),       # NOVO
-                    "status":                       "novo",
-                    "fonte":                        fonte,
-                }
-
-                sb_insert("companies", row,
-                          on_conflict="nome,localidade",
-                          ignore_duplicates=True)
-                inserted += 1
-
-            except Exception as ex:
-                log(f"[ERRO] Lead {i}: {ex}")
-
-        log(f"[JOB {job_id[:8]}] Concluído: {inserted} válidos, {descartados} descartados como lixo")
+        log(f"[JOB {job_id[:8]}] Concluído: {inserted} válidos, {descartados} descartados")
 
         sb_update("jobs", {"id": f"eq.{job_id}"},
                   {"status": "concluido", "progresso": 100,
