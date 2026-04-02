@@ -4,7 +4,7 @@
   "framework": "nextjs",
   "functions": {
     "api/leads.py": { "maxDuration": 30 },
-    "api/jobs.py": { "maxDuration": 60 },
+    "api/jobs.py": { "maxDuration": 300 },
     "api/stats.py": { "maxDuration": 30 },
     "api/purge.py": { "maxDuration": 30 },
     "api/leads/export.py": { "maxDuration": 30 },

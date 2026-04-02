@@ -24,9 +24,14 @@ import sys
 import os
 import json
 import uuid
+import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+
+# Orçamento total do job em segundos.
+# Deixamos 30s de margem antes do maxDuration=300 do Vercel.
+_JOB_BUDGET = 260
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -181,6 +186,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
         logs.append(msg)
 
     try:
+        t_start = time.time()   # relógio de parede — controla o orçamento
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"status": "a_correr", "progresso": 0})
 
         # ── ETAPA 1: Descoberta ───────────────────────────────────────────────
@@ -204,23 +210,34 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": 10})
 
         # ── ETAPA 2: Enriquecimento paralelo ──────────────────────────────────
-        log(f"[JOB {job_id[:8]}] Etapa 2: Enriquecimento paralelo de {total} candidatos...")
+        # Deadline: reserva 30s para scoring/inserção + margem até ao kill do Vercel
+        enrich_deadline = t_start + (_JOB_BUDGET - 30)
+        log(f"[JOB {job_id[:8]}] Etapa 2: Enriquecimento paralelo de {total} candidatos (deadline em {int(enrich_deadline - time.time())}s)...")
         presence_map: dict = {}
         with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {
-                executor.submit(_enrich, company): i
-                for i, company in enumerate(raw_companies)
-            }
+            futures = {}
+            for i, company in enumerate(raw_companies):
+                # Para de submeter novo trabalho se o orçamento de tempo esgotou
+                if time.time() >= enrich_deadline:
+                    log(f"[JOB {job_id[:8]}] Deadline atingido ao submeter — {i}/{total} empresas enriquecidas")
+                    break
+                futures[executor.submit(_enrich, company)] = i
+
             done = 0
-            for future in as_completed(futures, timeout=45):
-                i = futures[future]
-                try:
-                    presence_map[i] = future.result()
-                except Exception:
-                    presence_map[i] = dict(_EMPTY_PRESENCE)
-                done += 1
-                progress = 10 + int((done / total) * 70)
-                sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": progress})
+            remaining = max(5.0, enrich_deadline - time.time())
+            try:
+                for future in as_completed(futures, timeout=remaining):
+                    i = futures[future]
+                    try:
+                        presence_map[i] = future.result()
+                    except Exception:
+                        presence_map[i] = dict(_EMPTY_PRESENCE)
+                    done += 1
+                    progress = 10 + int((done / len(futures)) * 70)
+                    sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": progress})
+            except Exception:
+                # TimeoutError ou outro — guarda o que já temos
+                log(f"[JOB {job_id[:8]}] Timeout no enriquecimento — {done}/{len(futures)} concluídos")
 
         sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": 85})
 
