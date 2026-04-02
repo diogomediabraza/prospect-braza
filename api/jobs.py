@@ -12,6 +12,9 @@ CHANGELOG:
   motivo_descarte, confianca_email, confianca_telefone, fontes_encontradas
 - total_validos e total_descartados actualizados no job
 - max_resultados aumentado para 200
+- [DEEP ENRICH] Nível 1: DuckDuckGo para empresas sem website
+- [DEEP ENRICH] Nível 2: pesquisa Instagram/Facebook por nome
+- [DEEP ENRICH] Nível 3: Claude IA extrai contactos de qualquer página
 """
 
 # Classificações mínimas aceites — abaixo disto o lead é descartado
@@ -53,14 +56,111 @@ _EMPTY_PRESENCE = {
 }
 
 def _enrich(company: dict) -> dict:
-    """Worker: fetch digital presence for one company. Returns presence dict."""
-    website = company.get("website")
-    if not website:
-        return dict(_EMPTY_PRESENCE)
-    try:
-        return check_digital_presence(website)
-    except Exception:
-        return {**_EMPTY_PRESENCE, "tem_website": True}
+    """
+    Worker: enriquecimento completo de uma empresa.
+
+    Nível 0 (sempre): check_digital_presence no website original.
+    Nível 1 (se sem website ou sem contactos): DuckDuckGo para encontrar website.
+    Nível 2 (se sem Instagram/Facebook): pesquisa DDG site:instagram/facebook.
+    Nível 3 (se sem email+telefone e ANTHROPIC_API_KEY definido): Claude IA.
+
+    Timeouts curtos para caber no budget de 60s do Vercel Hobby.
+    Falha silenciosa — nunca propaga excepção.
+    """
+    name     = company.get("nome", "")
+    city     = company.get("localidade", "")
+    website  = company.get("website")
+
+    # ── Nível 0: Website original ─────────────────────────────────────────────
+    if website:
+        try:
+            presence = check_digital_presence(website)
+        except Exception:
+            presence = {**_EMPTY_PRESENCE, "tem_website": True}
+    else:
+        presence = dict(_EMPTY_PRESENCE)
+
+    # ── Nível 1: Pesquisa web (empresa sem website ou sem contactos) ──────────
+    sem_contacto = not presence.get("email") and not presence.get("telefone")
+    if (not website or sem_contacto) and name and city:
+        try:
+            from lib.source_web_search import search_web_for_business
+            web = search_web_for_business(name, city)
+            # Preenche campos em falta
+            for field in ("telefone", "email"):
+                if web.get(field) and not presence.get(field):
+                    presence[field] = web[field]
+            # Se encontrou website novo, faz check_digital_presence
+            if web.get("website") and not website:
+                try:
+                    new_p = check_digital_presence(web["website"])
+                    presence["tem_website"] = True
+                    presence["website_encontrado"] = web["website"]
+                    for field in ("email", "telefone", "instagram", "facebook",
+                                  "linkedin", "tem_instagram", "tem_facebook",
+                                  "tem_linkedin", "tem_gtm", "tem_ga4",
+                                  "tem_pixel_meta", "tem_google_ads",
+                                  "tem_loja_online", "confianca_email",
+                                  "confianca_telefone"):
+                        if new_p.get(field) and not presence.get(field):
+                            presence[field] = new_p[field]
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[ENRICH L1] '{name}': {type(e).__name__}", flush=True)
+
+    # ── Nível 2: Redes sociais (sem Instagram e sem Facebook) ─────────────────
+    sem_social = not presence.get("instagram") and not presence.get("facebook")
+    if sem_social and name and city:
+        try:
+            from lib.source_web_search import search_social_profiles
+            social = search_social_profiles(name, city)
+            for field in ("instagram", "facebook", "tem_instagram",
+                          "tem_facebook", "telefone", "email"):
+                if social.get(field) and not presence.get(field):
+                    presence[field] = social[field]
+            # Website encontrado via redes sociais
+            if social.get("website") and not presence.get("tem_website"):
+                presence["website_encontrado"] = social["website"]
+        except Exception as e:
+            print(f"[ENRICH L2] '{name}': {type(e).__name__}", flush=True)
+
+    # ── Nível 3: IA Claude — extracção inteligente (último recurso) ───────────
+    sem_tudo = not presence.get("email") and not presence.get("telefone")
+    if sem_tudo and os.environ.get("ANTHROPIC_API_KEY"):
+        # Tenta encontrar algum HTML para dar à IA
+        url_para_ia = (
+            website or
+            presence.get("website_encontrado") or
+            presence.get("instagram") or
+            presence.get("facebook")
+        )
+        if url_para_ia:
+            try:
+                from lib.scraper import fetch_url
+                from lib.ai_extractor import extract_contacts_with_ai
+                html = fetch_url(url_para_ia, timeout=6)
+                if html:
+                    ai = extract_contacts_with_ai(html, name, city)
+                    for field in ("email", "telefone", "website",
+                                  "instagram", "facebook", "linkedin"):
+                        if ai.get(field) and not presence.get(field):
+                            presence[field] = ai[field]
+                    # Actualizar booleanos de redes sociais
+                    if ai.get("instagram"):
+                        presence["tem_instagram"] = True
+                    if ai.get("facebook"):
+                        presence["tem_facebook"] = True
+                    if ai.get("linkedin"):
+                        presence["tem_linkedin"] = True
+            except Exception as e:
+                print(f"[ENRICH L3] '{name}': {type(e).__name__}", flush=True)
+
+    # Propaga website encontrado para o campo principal (para scoring)
+    if presence.get("website_encontrado") and not company.get("website"):
+        company["website"] = presence["website_encontrado"]
+
+    return presence
 
 
 def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int):
