@@ -30,8 +30,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 # Orçamento total do job em segundos.
-# Deixamos 30s de margem antes do maxDuration=300 do Vercel.
-_JOB_BUDGET = 260
+# Vercel Hobby: maxDuration=60s — deixamos 10s de margem.
+_JOB_BUDGET = 50
 
 sys.path.insert(0, os.path.dirname(__file__))
 

@@ -18,7 +18,7 @@ from typing import Optional
 _ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 _OPENAI_MODEL    = "gpt-4o-mini"
 _MAX_HTML_CHARS  = 4000   # limita tokens → limita custo
-_TIMEOUT         = 12
+_TIMEOUT         = 7
 
 
 def _clean_html(html: str) -> str:

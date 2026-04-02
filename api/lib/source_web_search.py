@@ -57,7 +57,7 @@ def _fetch(url: str, timeout: int = 5) -> str:
 def _ddg_search(query: str, max_results: int = 5) -> list:
     """DuckDuckGo HTML — acessível de IPs cloud, sem API key."""
     params = urllib.parse.urlencode({"q": query, "kl": "pt-pt", "ia": "web"})
-    html = _fetch(f"{_DDG_URL}?{params}", timeout=6)
+    html = _fetch(f"{_DDG_URL}?{params}", timeout=4)
     if not html:
         return []
 
