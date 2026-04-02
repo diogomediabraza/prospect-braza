@@ -195,8 +195,31 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
         pool_size = min(max_results * 4, 400)
         log(f"[JOB {job_id[:8]}] Etapa 1: Descoberta — a pedir {pool_size} candidatos para garantir {max_results} de qualidade...")
         raw_companies = scrape_all_sources(nicho, localidade, pool_size)
+        total_bruto = len(raw_companies)
+        log(f"[JOB {job_id[:8]}] {total_bruto} candidatos encontrados nas fontes")
+
+        # ── Deduplicação: remove empresas já na base de dados ─────────────────
+        try:
+            existentes = sb_select(
+                "companies",
+                filters={"nicho": f"eq.{nicho}", "localidade": f"ilike.{localidade}%"},
+                select="nome",
+                limit=2000,
+            )
+            nomes_existentes = {
+                r["nome"].lower().strip() for r in existentes if r.get("nome")
+            }
+            if nomes_existentes:
+                raw_companies = [
+                    c for c in raw_companies
+                    if c.get("nome", "").lower().strip() not in nomes_existentes
+                ]
+                log(f"[JOB {job_id[:8]}] Deduplicação: {total_bruto - len(raw_companies)} já existiam — {len(raw_companies)} novos para processar")
+        except Exception as e:
+            log(f"[JOB {job_id[:8]}] Aviso: falha na deduplicação ({e}) — a processar tudo")
+
         total = len(raw_companies)
-        log(f"[JOB {job_id[:8]}] {total} candidatos encontrados antes de filtragem")
+        log(f"[JOB {job_id[:8]}] {total} candidatos novos para enriquecer e classificar")
 
         if total == 0:
             sb_update("jobs", {"id": f"eq.{job_id}"},
