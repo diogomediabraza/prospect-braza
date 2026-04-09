@@ -21,6 +21,8 @@ import {
   Trash2,
   CheckSquare,
   Square,
+  AlertCircle,
+  Info,
 } from "lucide-react";
 import { getLeads, exportLeads, deleteLead, claimLead, unclaimLead, getStats } from "@/lib/api";
 import type { Company, CompanyStatus, LeadClassificacao } from "@/lib/types";
@@ -145,9 +147,15 @@ function LeadsPageInner() {
   // Selecção múltipla para bulk delete
   const [selected,    setSelected]    = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showFilaTooltip, setShowFilaTooltip] = useState(false);
 
   const PER_PAGE   = 20;
   const totalPages = Math.ceil(total / PER_PAGE);
+
+  // Count incomplete leads (missing phone, email, or website)
+  const incompleteLeads = leads.filter(lead =>
+    !lead.telefone && !lead.email && !lead.website
+  ).length;
 
   const loadLeads = useCallback(async () => {
     setLoading(true);
@@ -302,7 +310,49 @@ function LeadsPageInner() {
               <div className="flex items-center gap-1.5 text-xs" style={{ color: '#ea5a1c' }}>
                 <span className="font-semibold">{availableCount}</span> disponíveis
               </div>
+              {incompleteLeads > 0 && (
+                <>
+                  <div className="h-3 w-px" style={{ background: 'var(--border)' }} />
+                  <div className="flex items-center gap-1.5 text-xs" style={{ color: '#f3e600' }}>
+                    <AlertCircle size={12} />
+                    <span className="font-semibold">{incompleteLeads}</span> incompletos
+                  </div>
+                </>
+              )}
+              <div className="h-3 w-px" style={{ background: 'var(--border)' }} />
+              <button
+                className="flex items-center gap-1.5 text-xs transition-all"
+                style={{ color: '#009bc5', cursor: 'pointer', background: 'transparent', border: 'none', padding: 0 }}
+                onClick={() => setShowFilaTooltip(!showFilaTooltip)}
+                title="Mostrar regras da fila"
+              >
+                <Info size={12} />
+                <span className="underline">Regras Fila</span>
+              </button>
             </div>
+
+            {/* Fila rules tooltip */}
+            {showFilaTooltip && (
+              <div
+                className="mt-3 p-3 rounded-lg text-xs border"
+                style={{
+                  background: 'rgba(0,155,197,0.06)',
+                  borderColor: 'rgba(0,155,197,0.2)',
+                  color: 'var(--text)',
+                  maxWidth: '400px',
+                }}
+              >
+                <p style={{ margin: 0, fontWeight: 600, marginBottom: '6px' }}>Regras de Priorização:</p>
+                <ul style={{ margin: '0 0 0 16px', paddingLeft: 0 }}>
+                  <li style={{ marginBottom: '4px' }}>Score de qualidade (0-100)</li>
+                  <li style={{ marginBottom: '4px' }}>Presença digital (maturidade)</li>
+                  <li style={{ marginBottom: '4px' }}>Classificação (excelente, bom, fraco)</li>
+                </ul>
+                <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'var(--ts)', fontStyle: 'italic' }}>
+                  Leads já enviados ao CRM são excluídos da fila
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
@@ -580,8 +630,11 @@ function LeadsPageInner() {
 
                   {/* Nome da empresa */}
                   <div className="col-span-3 min-w-0">
-                    <div className="font-medium text-sm truncate" style={{ color: "var(--text)" }}>
-                      {lead.nome}
+                    <div className="flex items-center gap-2 font-medium text-sm" style={{ color: "var(--text)" }}>
+                      <span className="truncate">{lead.nome}</span>
+                      {!lead.telefone && !lead.email && !lead.website && (
+                        <AlertCircle size={13} style={{ color: "#f3e600", flexShrink: 0 }} title="Lead incompleto: faltam dados de contacto" />
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       {lead.nicho && (
