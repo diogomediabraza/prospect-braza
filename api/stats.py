@@ -22,7 +22,7 @@ class handler(BaseHTTPRequestHandler):
             # Fetch all companies with only the columns we need for stats
             companies = sb_select(
                 "prospect_companies",
-                select="tem_website,tem_instagram,tem_facebook,score_oportunidade_comercial"
+                select="tem_website,tem_instagram,tem_facebook,score_oportunidade_comercial,crm_lead_id"
             )
 
             total_leads = len(companies)
@@ -32,6 +32,8 @@ class handler(BaseHTTPRequestHandler):
                 1 for r in companies
                 if not r.get("tem_website") and not r.get("tem_facebook") and not r.get("tem_instagram")
             )
+            leads_no_crm = sum(1 for r in companies if r.get("crm_lead_id") is not None)
+            leads_disponiveis = sum(1 for r in companies if r.get("crm_lead_id") is None)
             scores = [
                 float(r["score_oportunidade_comercial"])
                 for r in companies
@@ -48,6 +50,8 @@ class handler(BaseHTTPRequestHandler):
                 "leads_com_website": leads_com_website,
                 "leads_com_instagram": leads_com_instagram,
                 "leads_sem_presenca_digital": leads_sem_presenca,
+                "leads_no_crm": leads_no_crm,
+                "leads_disponiveis": leads_disponiveis,
                 "jobs_ativos": jobs_ativos,
                 "media_score_oportunidade": media_score,
             }

@@ -22,7 +22,7 @@ import {
   CheckSquare,
   Square,
 } from "lucide-react";
-import { getLeads, exportLeads, deleteLead, claimLead, unclaimLead } from "@/lib/api";
+import { getLeads, exportLeads, deleteLead, claimLead, unclaimLead, getStats } from "@/lib/api";
 import type { Company, CompanyStatus, LeadClassificacao } from "@/lib/types";
 import { UserCheck, UserX, Users, Database } from "lucide-react";
 import { CompanyStatusBadge } from "@/components/StatusBadge";
@@ -123,6 +123,8 @@ function LeadsPageInner() {
   const [page,        setPage]        = useState(1);
   const [loading,     setLoading]     = useState(true);
   const [selectedLead, setSelectedLead] = useState<Company | null>(null);
+  const [crmCount,    setCrmCount]    = useState(0);
+  const [availableCount, setAvailableCount] = useState(0);
 
   // Filtros
   const [search,      setSearch]      = useState("");
@@ -181,6 +183,18 @@ function LeadsPageInner() {
     const timer = setTimeout(loadLeads, 300);
     return () => clearTimeout(timer);
   }, [loadLeads]);
+
+  // Load CRM stats
+  useEffect(() => {
+    getStats()
+      .then((s) => {
+        setCrmCount(s.leads_no_crm ?? 0);
+        setAvailableCount(s.leads_disponiveis ?? 0);
+      })
+      .catch(() => {
+        // silently fail
+      });
+  }, []);
 
   // Export CSV
   const handleExport = async () => {
@@ -278,6 +292,17 @@ function LeadsPageInner() {
             <p className="text-sm" style={{ color: "var(--ts)" }}>
               {loading ? "A carregar..." : `${total.toLocaleString("pt-PT")} leads encontrados`}
             </p>
+            {/* CRM sync counters */}
+            <div className="flex items-center gap-4 mt-2">
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: '#009bc5' }}>
+                <Database size={12} />
+                <span className="font-semibold">{crmCount}</span> no CRM
+              </div>
+              <div className="h-3 w-px" style={{ background: 'var(--border)' }} />
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: '#ea5a1c' }}>
+                <span className="font-semibold">{availableCount}</span> disponíveis
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
@@ -620,6 +645,15 @@ function LeadsPageInner() {
                   {/* Status CRM + Claim */}
                   <div className="col-span-2 flex flex-col items-end justify-center gap-1">
                     <CompanyStatusBadge status={lead.status} />
+                    {lead.crm_lead_id && (
+                      <span
+                        className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"
+                        style={{ background: 'rgba(0,155,197,0.12)', color: '#009bc5' }}
+                      >
+                        <Database size={10} />
+                        No CRM
+                      </span>
+                    )}
                     {lead.claimed_by && (
                       <span
                         className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"

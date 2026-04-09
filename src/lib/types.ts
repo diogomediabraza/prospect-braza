@@ -129,6 +129,8 @@ export interface StatsResponse {
   leads_com_website: number;
   leads_com_instagram: number;
   leads_sem_presenca_digital: number;
+  leads_no_crm?: number;        // NOVO: leads já no CRM
+  leads_disponiveis?: number;   // NOVO: leads ainda não sincronizados com CRM
   leads_excelentes?: number;    // NOVO
   leads_bons?: number;          // NOVO
   jobs_ativos: number;

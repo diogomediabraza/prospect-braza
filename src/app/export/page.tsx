@@ -158,7 +158,7 @@ export default function ExportPage() {
           </div>
 
           {error && (
-            <p className="text-sm" style={{ color: "#f87171" }}>
+            <p className="text-sm" style={{ color: "#e6391e" }}>
               {error}
             </p>
           )}
