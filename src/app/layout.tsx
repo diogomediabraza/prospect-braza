@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import TopNav from "@/components/TopNav";
 
 export const metadata: Metadata = {
   title: "Prospect Braza — Motor de Prospecção B2B",
@@ -18,8 +18,8 @@ export default function RootLayout({
   return (
     <html lang="pt-PT">
       <body>
-        <div className="flex min-h-screen">
-          <Sidebar />
+        <div className="flex flex-col min-h-screen">
+          <TopNav />
           <main className="flex-1 min-w-0 overflow-auto">
             {children}
           </main>
