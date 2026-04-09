@@ -50,6 +50,10 @@ export async function getLeads(params: {
   sort_dir?: "asc" | "desc";
   sem_email?: string;                 // NOVO: "1" para filtrar leads sem email
   sem_telefone?: string;              // NOVO: "1" para filtrar leads sem telefone
+  // Claim & CRM filters
+  claimed?: "claimed" | "unclaimed";
+  claimed_by?: string;
+  in_crm?: "0" | "1";
 }): Promise<LeadsResponse> {
   const qs = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -83,6 +87,28 @@ export async function deleteLead(id: string): Promise<void> {
   return request(`/leads/${id}`, { method: "DELETE" });
 }
 
+// Claim a lead (set claimed_by + optional status change)
+export async function claimLead(
+  id: string,
+  claimedBy: string,
+  status?: CompanyStatus
+): Promise<Company> {
+  const body: Record<string, string> = { claimed_by: claimedBy };
+  if (status) body.status = status;
+  return request(`/leads/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// Unclaim a lead
+export async function unclaimLead(id: string): Promise<Company> {
+  return request(`/leads/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ claimed_by: null, claimed_at: null, status: "novo" }),
+  });
+}
+
 export async function exportLeads(params: {
   status?: CompanyStatus;
   classificacao?: LeadClassificacao;  // NOVO
@@ -96,6 +122,17 @@ export async function exportLeads(params: {
   const res = await fetch(`${API_BASE}/leads/export?${qs}`);
   if (!res.ok) throw new Error("Erro ao exportar");
   return res.blob();
+}
+
+// Push prospect lead to CRM
+export async function pushLeadToCrm(
+  leadId: string,
+  ownerId?: string
+): Promise<{ ok: boolean; crm_lead_id?: string; msg: string }> {
+  return request("/leads/to-crm", {
+    method: "POST",
+    body: JSON.stringify({ lead_id: leadId, ...(ownerId && { owner_id: ownerId }) }),
+  });
 }
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────────

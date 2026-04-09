@@ -21,7 +21,7 @@ class handler(BaseHTTPRequestHandler):
         try:
             # Fetch all companies with only the columns we need for stats
             companies = sb_select(
-                "companies",
+                "prospect_companies",
                 select="tem_website,tem_instagram,tem_facebook,score_oportunidade_comercial"
             )
 
@@ -40,7 +40,7 @@ class handler(BaseHTTPRequestHandler):
             media_score = round(sum(scores) / len(scores), 2) if scores else 0.0
 
             # Active jobs
-            jobs = sb_select("jobs", filters={"status": "eq.a_correr"}, select="id")
+            jobs = sb_select("prospect_jobs", filters={"status": "eq.a_correr"}, select="id")
             jobs_ativos = len(jobs)
 
             stats = {

@@ -82,6 +82,13 @@ export interface Company {
   status: CompanyStatus;
   notas?: string;
 
+  // Claim tracking
+  claimed_by?: string | null;
+  claimed_at?: string | null;
+
+  // CRM bridge
+  crm_lead_id?: string | null;
+
   // Metadata
   fonte?: string;
   data_criacao: string;

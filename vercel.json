@@ -18,6 +18,9 @@
     "api/leads/export.py": {
       "maxDuration": 30
     },
+    "api/leads/to-crm.py": {
+      "maxDuration": 30
+    },
     "api/leads/[id].py": {
       "maxDuration": 30
     },
@@ -32,6 +35,10 @@
     {
       "source": "/api/leads/export",
       "destination": "/api/leads/export"
+    },
+    {
+      "source": "/api/leads/to-crm",
+      "destination": "/api/leads/to-crm"
     },
     {
       "source": "/api/leads/:id/cancel",

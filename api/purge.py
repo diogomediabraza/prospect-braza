@@ -42,7 +42,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            _sb_delete_all("companies")
+            _sb_delete_all("prospect_companies")
             status, headers, body = json_response({"ok": True, "msg": "Todos os leads apagados com sucesso."})
         except Exception as e:
             status, headers, body = json_response({"ok": False, "error": str(e)}, 500)

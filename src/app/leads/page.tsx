@@ -22,8 +22,9 @@ import {
   CheckSquare,
   Square,
 } from "lucide-react";
-import { getLeads, exportLeads, deleteLead } from "@/lib/api";
+import { getLeads, exportLeads, deleteLead, claimLead, unclaimLead } from "@/lib/api";
 import type { Company, CompanyStatus, LeadClassificacao } from "@/lib/types";
+import { UserCheck, UserX, Users, Database } from "lucide-react";
 import { CompanyStatusBadge } from "@/components/StatusBadge";
 import { ScoreCircle } from "@/components/ScoreBars";
 import DigitalPresence from "@/components/DigitalPresence";
@@ -131,6 +132,9 @@ function LeadsPageInner() {
   const [localidade,  setLocalidade]  = useState(searchParams.get("localidade") ?? "");
   const [semEmail,    setSemEmail]    = useState(false);     // NOVO
   const [semTelefone, setSemTelefone] = useState(false);     // NOVO
+  // Claim & CRM filters
+  const [claimed,     setClaimed]     = useState<"" | "claimed" | "unclaimed">("");
+  const [inCrm,       setInCrm]       = useState<"" | "0" | "1">("");
   const [sortBy,      setSortBy]      = useState("score_qualidade_lead");
   const [sortDir,     setSortDir]     = useState<"asc" | "desc">("desc");
   const [showFilters, setShowFilters] = useState(false);
@@ -159,6 +163,8 @@ function LeadsPageInner() {
       if (search)     params.search     = search;
       if (semEmail)   params.sem_email  = "1";          // NOVO
       if (semTelefone) params.sem_telefone = "1";       // NOVO
+      if (claimed)    params.claimed    = claimed;
+      if (inCrm)      params.in_crm     = inCrm;
 
       const res = await getLeads(params as Parameters<typeof getLeads>[0]);
       setLeads(res.leads);
@@ -169,7 +175,7 @@ function LeadsPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [page, status, classif, nicho, localidade, search, sortBy, sortDir, semEmail, semTelefone]);
+  }, [page, status, classif, nicho, localidade, search, sortBy, sortDir, semEmail, semTelefone, claimed, inCrm]);
 
   useEffect(() => {
     const timer = setTimeout(loadLeads, 300);
@@ -257,7 +263,7 @@ function LeadsPageInner() {
     }
   };
 
-  const hasFilters = search || status || classif || nicho || localidade || semEmail || semTelefone;
+  const hasFilters = search || status || classif || nicho || localidade || semEmail || semTelefone || claimed || inCrm;
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
@@ -392,6 +398,45 @@ function LeadsPageInner() {
                 />
                 Sem telefone
               </label>
+
+              {/* Smart filters — claim & CRM */}
+              <div className="h-4 w-px" style={{ background: "var(--border)" }} />
+
+              <button
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+                style={claimed === "unclaimed"
+                  ? { background: "var(--od)", color: "var(--ol)" }
+                  : { background: "var(--card)", color: "var(--ts)" }
+                }
+                onClick={() => { setClaimed(claimed === "unclaimed" ? "" : "unclaimed"); setPage(1); }}
+              >
+                <UserX size={12} />
+                Não reivindicados
+              </button>
+
+              <button
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+                style={claimed === "claimed"
+                  ? { background: "var(--od)", color: "var(--ol)" }
+                  : { background: "var(--card)", color: "var(--ts)" }
+                }
+                onClick={() => { setClaimed(claimed === "claimed" ? "" : "claimed"); setPage(1); }}
+              >
+                <Users size={12} />
+                Reivindicados
+              </button>
+
+              <button
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+                style={inCrm === "1"
+                  ? { background: "var(--od)", color: "var(--ol)" }
+                  : { background: "var(--card)", color: "var(--ts)" }
+                }
+                onClick={() => { setInCrm(inCrm === "1" ? "" : "1"); setPage(1); }}
+              >
+                <Database size={12} />
+                Já no CRM
+              </button>
             </div>
 
             {hasFilters && (
@@ -399,7 +444,8 @@ function LeadsPageInner() {
                 className="btn-ghost text-xs col-span-full justify-start"
                 onClick={() => {
                   setSearch(""); setStatus(""); setClassif(""); setNicho("");
-                  setLocalidade(""); setSemEmail(false); setSemTelefone(false); setPage(1);
+                  setLocalidade(""); setSemEmail(false); setSemTelefone(false);
+                  setClaimed(""); setInCrm(""); setPage(1);
                 }}
               >
                 <X size={13} />
@@ -558,9 +604,18 @@ function LeadsPageInner() {
                     <ScoreCircle value={lead.score_prioridade_sdr} size="sm" />
                   </div>
 
-                  {/* Status CRM */}
-                  <div className="col-span-2 flex items-center justify-end">
+                  {/* Status CRM + Claim */}
+                  <div className="col-span-2 flex flex-col items-end justify-center gap-1">
                     <CompanyStatusBadge status={lead.status} />
+                    {lead.claimed_by && (
+                      <span
+                        className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"
+                        style={{ background: "rgba(96,165,250,0.12)", color: "#60a5fa" }}
+                      >
+                        <UserCheck size={10} />
+                        {lead.claimed_by}
+                      </span>
+                    )}
                   </div>
                 </div>
               );

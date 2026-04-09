@@ -1,12 +1,13 @@
 """
 GET    /api/leads/[id] — get single lead
-PATCH  /api/leads/[id] — update status/notes
+PATCH  /api/leads/[id] — update status/notes/claim/crm
 DELETE /api/leads/[id] — delete lead
 """
 from http.server import BaseHTTPRequestHandler
 import sys
 import os
 import urllib.parse
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -30,7 +31,7 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         lead_id = self._get_id()
         try:
-            lead = sb_select_one("companies", filters={"id": f"eq.{lead_id}"})
+            lead = sb_select_one("prospect_companies", filters={"id": f"eq.{lead_id}"})
             if not lead:
                 status, headers, body = error_response("Lead não encontrado", 404)
             else:
@@ -43,15 +44,32 @@ class handler(BaseHTTPRequestHandler):
         lead_id = self._get_id()
         try:
             data = parse_body(self)
-            allowed = {"status", "notas"}
+
+            # Expanded allowed fields — now includes claimed_by, claimed_at, crm_lead_id
+            allowed = {"status", "notas", "claimed_by", "claimed_at", "crm_lead_id"}
             updates = {k: v for k, v in data.items() if k in allowed}
+
+            # Auto-set claimed_at when claimed_by is provided
+            if "claimed_by" in updates and updates["claimed_by"]:
+                if "claimed_at" not in updates:
+                    updates["claimed_at"] = datetime.now(timezone.utc).isoformat()
+
+            # Auto-set claimed_by when status changes from 'novo' to something else
+            if "status" in updates and updates["status"] != "novo":
+                if "claimed_by" not in updates:
+                    current = sb_select_one("prospect_companies", {"id": f"eq.{lead_id}"}, select="status,claimed_by")
+                    if current and current.get("status") == "novo" and not current.get("claimed_by"):
+                        user = self.headers.get("X-User-Name") or self.headers.get("X-User-Email")
+                        if user:
+                            updates["claimed_by"] = user
+                            updates["claimed_at"] = datetime.now(timezone.utc).isoformat()
 
             if not updates:
                 status, headers, body = error_response("Nenhum campo válido para actualizar")
                 send_response(self, status, headers, body)
                 return
 
-            updated = sb_update("companies", {"id": f"eq.{lead_id}"}, updates)
+            updated = sb_update("prospect_companies", {"id": f"eq.{lead_id}"}, updates)
             if not updated:
                 status, headers, body = error_response("Lead não encontrado", 404)
             else:
@@ -63,7 +81,7 @@ class handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         lead_id = self._get_id()
         try:
-            sb_delete("companies", {"id": f"eq.{lead_id}"})
+            sb_delete("prospect_companies", {"id": f"eq.{lead_id}"})
             status, headers, body = json_response({"ok": True})
         except Exception as e:
             status, headers, body = error_response(str(e), 500)

@@ -29,7 +29,7 @@ class handler(BaseHTTPRequestHandler):
             return
 
         try:
-            job = sb_select_one("jobs", filters={"id": f"eq.{job_id}"})
+            job = sb_select_one("prospect_jobs", filters={"id": f"eq.{job_id}"})
             if not job:
                 status, headers, body = error_response("Job não encontrado", 404)
                 send_response(self, status, headers, body)
@@ -43,7 +43,7 @@ class handler(BaseHTTPRequestHandler):
                 return
 
             updated = sb_update(
-                "jobs", {"id": f"eq.{job_id}"},
+                "prospect_jobs", {"id": f"eq.{job_id}"},
                 {"status": "cancelado", "data_fim": "now()"}
             )
             status, headers, body = json_response(updated)
