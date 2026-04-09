@@ -50,7 +50,7 @@ export function ScoreCircle({ value = 0, size = "md" }: ScoreCircleProps) {
   const getColor = () => {
     if (pct >= 70) return "#10b981";
     if (pct >= 40) return "#f59e0b";
-    return "#FF5500";
+    return "var(--orange)";
   };
 
   const sizes = {
