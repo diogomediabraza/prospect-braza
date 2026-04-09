@@ -80,9 +80,9 @@ function JobCard({
         isRunning
           ? { borderColor: "rgba(255,85,0,0.3)" }
           : isDone
-          ? { borderColor: "rgba(16,185,129,0.15)" }
+          ? { borderColor: "rgba(0,155,197,0.15)" }
           : isError
-          ? { borderColor: "rgba(239,68,68,0.15)" }
+          ? { borderColor: "rgba(230,57,30,0.15)" }
           : {}
       }
       onClick={handleCardClick}
@@ -109,14 +109,14 @@ function JobCard({
               onClick={(e) => { e.stopPropagation(); onCancel(job.id); }}
               title="Cancelar job"
             >
-              <StopCircle size={14} style={{ color: "#f87171" }} />
+              <StopCircle size={14} style={{ color: "#e6391e" }} />
             </button>
           )}
           {confirmDelete ? (
             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
               <button
                 className="px-2 py-1 rounded-lg text-xs font-medium"
-                style={{ background: "#ef4444", color: "#fff" }}
+                style={{ background: "#e6391e", color: "#fff" }}
                 onClick={handleDelete}
                 disabled={deleting}
               >
@@ -161,7 +161,7 @@ function JobCard({
       {isError && job.mensagem_erro && (
         <div
           className="flex items-start gap-2 p-3 rounded-lg text-xs"
-          style={{ background: "rgba(239,68,68,0.08)", color: "#f87171" }}
+          style={{ background: "rgba(230,57,30,0.08)", color: "#e6391e" }}
         >
           <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
           {job.mensagem_erro}
@@ -176,14 +176,14 @@ function JobCard({
           </div>
           <div className="text-xs" style={{ color: "var(--tm)" }}>Total</div>
         </div>
-        <div className="text-center p-2.5 rounded-lg" style={{ background: "rgba(16,185,129,0.08)" }}>
-          <div className="text-lg font-display tracking-wider" style={{ color: "#10b981" }}>
+        <div className="text-center p-2.5 rounded-lg" style={{ background: "rgba(0,155,197,0.08)" }}>
+          <div className="text-lg font-display tracking-wider" style={{ color: "#009bc5" }}>
             {job.total_validos ?? "—"}
           </div>
           <div className="text-xs" style={{ color: "var(--tm)" }}>Válidos</div>
         </div>
-        <div className="text-center p-2.5 rounded-lg" style={{ background: "rgba(239,68,68,0.08)" }}>
-          <div className="text-lg font-display tracking-wider" style={{ color: "#f87171" }}>
+        <div className="text-center p-2.5 rounded-lg" style={{ background: "rgba(230,57,30,0.08)" }}>
+          <div className="text-lg font-display tracking-wider" style={{ color: "#e6391e" }}>
             {job.total_descartados ?? "—"}
           </div>
           <div className="text-xs" style={{ color: "var(--tm)" }}>Lixo</div>
@@ -212,14 +212,14 @@ function JobCard({
           })}
         </span>
         {isDone && job.total_encontrados > 0 && (
-          <span className="flex items-center gap-1" style={{ color: "#10b981" }}>
+          <span className="flex items-center gap-1" style={{ color: "#009bc5" }}>
             <Users size={10} />
             Ver leads
             <ChevronRight size={10} />
           </span>
         )}
         {isDone && job.total_encontrados === 0 && (
-          <span className="flex items-center gap-1" style={{ color: "#10b981" }}>
+          <span className="flex items-center gap-1" style={{ color: "#009bc5" }}>
             <CheckCircle2 size={10} />
             Concluído
           </span>

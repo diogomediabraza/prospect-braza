@@ -49,10 +49,10 @@ const CLASSIF_CONFIG: Record<
   LeadClassificacao,
   { label: string; color: string; bg: string; emoji: string }
 > = {
-  excelente: { label: "Excelente", color: "#10b981", bg: "rgba(16,185,129,0.12)", emoji: "⭐" },
-  bom:       { label: "Bom",       color: "#60a5fa", bg: "rgba(96,165,250,0.12)", emoji: "✅" },
-  fraco:     { label: "Fraco",     color: "#f59e0b", bg: "rgba(245,158,11,0.12)", emoji: "⚠️" },
-  lixo:      { label: "Lixo",      color: "#ef4444", bg: "rgba(239,68,68,0.12)",  emoji: "🗑️" },
+  excelente: { label: "Excelente", color: "#009bc5", bg: "rgba(0,155,197,0.12)", emoji: "⭐" },
+  bom:       { label: "Bom",       color: "#9e539b", bg: "rgba(158,83,155,0.12)", emoji: "✅" },
+  fraco:     { label: "Fraco",     color: "#f3e600", bg: "rgba(243,230,0,0.12)", emoji: "⚠️" },
+  lixo:      { label: "Lixo",      color: "#e6391e", bg: "rgba(230,57,30,0.12)",  emoji: "🗑️" },
   pendente:  { label: "Pendente",  color: "#6b7280", bg: "rgba(107,114,128,0.1)", emoji: "⏳" },
 };
 
@@ -94,9 +94,9 @@ function ClassificacaoBlock({ value, score, motivo }: {
 
 function ConfiancaIcon({ value }: { value?: ConfiancaField }) {
   if (!value || value === "desconhecida") return null;
-  if (value === "alta")  return <ShieldCheck  size={13} style={{ color: "#10b981" }} aria-label="Confiança alta" />;
-  if (value === "media") return <ShieldAlert  size={13} style={{ color: "#f59e0b" }} aria-label="Confiança média" />;
-  return                        <AlertCircle  size={13} style={{ color: "#ef4444" }} aria-label="Confiança baixa" />;
+  if (value === "alta")  return <ShieldCheck  size={13} style={{ color: "#009bc5" }} aria-label="Confiança alta" />;
+  if (value === "media") return <ShieldAlert  size={13} style={{ color: "#f3e600" }} aria-label="Confiança média" />;
+  return                        <AlertCircle  size={13} style={{ color: "#e6391e" }} aria-label="Confiança baixa" />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,13 +204,13 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                 </span>
               )}
               {company.claimed_by && (
-                <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(96,165,250,0.12)", color: "#60a5fa" }}>
+                <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(158,83,155,0.12)", color: "#9e539b" }}>
                   <UserCheck size={10} />
                   {company.claimed_by}
                 </span>
               )}
               {crmPushed && (
-                <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(16,185,129,0.12)", color: "#10b981" }}>
+                <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(0,155,197,0.12)", color: "#009bc5" }}>
                   <Database size={10} />
                   No CRM
                 </span>
@@ -221,13 +221,13 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
           <div className="flex items-center gap-2 ml-4 flex-shrink-0">
             {confirmDelete ? (
               <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: "#ef4444" }}>
+                <span className="text-xs" style={{ color: "#e6391e" }}>
                   <AlertTriangle size={12} className="inline mr-1" />
                   Apagar este lead?
                 </span>
                 <button
                   className="px-3 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "#ef4444", color: "#fff" }}
+                  style={{ background: "#e6391e", color: "#fff" }}
                   onClick={handleDelete}
                   disabled={deleting}
                 >
@@ -247,7 +247,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                 onClick={handleDelete}
                 title="Apagar lead"
                 style={{ color: "var(--tm)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#e6391e")}
                 onMouseLeave={(e) => (e.currentTarget.style.color = "var(--tm)")}
               >
                 <Trash2 size={16} />
@@ -280,7 +280,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
             </div>
             <div className="flex-1 space-y-2">
               <ScoreBar label="Maturidade Digital" value={company.score_maturidade_digital} />
-              <ScoreBar label="Oportunidade" value={company.score_oportunidade_comercial} color="#f59e0b" />
+              <ScoreBar label="Oportunidade" value={company.score_oportunidade_comercial} color="#f3e600" />
               <ScoreBar label="Prioridade SDR" value={company.score_prioridade_sdr} color="var(--orange)" />
             </div>
           </div>
@@ -310,7 +310,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                   <a href={`tel:${company.telefone}`} className="text-sm flex-1" style={{ color: "var(--text)" }}>{company.telefone}</a>
                   <ConfiancaIcon value={company.confianca_telefone} />
                   <button className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => copyToClipboard(company.telefone!, "tel")} title="Copiar">
-                    {copied === "tel" ? <Check size={12} style={{ color: "#10b981" }} /> : <Copy size={12} style={{ color: "var(--tm)" }} />}
+                    {copied === "tel" ? <Check size={12} style={{ color: "#009bc5" }} /> : <Copy size={12} style={{ color: "var(--tm)" }} />}
                   </button>
                 </div>
               )}
@@ -319,7 +319,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                   <Phone size={14} style={{ color: "var(--tm)" }} />
                   <span className="text-sm flex-1" style={{ color: "var(--text)" }}>{company.telefone2}</span>
                   <button className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => copyToClipboard(company.telefone2!, "tel2")} title="Copiar">
-                    {copied === "tel2" ? <Check size={12} style={{ color: "#10b981" }} /> : <Copy size={12} style={{ color: "var(--tm)" }} />}
+                    {copied === "tel2" ? <Check size={12} style={{ color: "#009bc5" }} /> : <Copy size={12} style={{ color: "var(--tm)" }} />}
                   </button>
                 </div>
               )}
@@ -329,7 +329,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                   <a href={`mailto:${company.email}`} className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>{company.email}</a>
                   <ConfiancaIcon value={company.confianca_email} />
                   <button className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => copyToClipboard(company.email!, "email")} title="Copiar">
-                    {copied === "email" ? <Check size={12} style={{ color: "#10b981" }} /> : <Copy size={12} style={{ color: "var(--tm)" }} />}
+                    {copied === "email" ? <Check size={12} style={{ color: "#009bc5" }} /> : <Copy size={12} style={{ color: "var(--tm)" }} />}
                   </button>
                 </div>
               )}

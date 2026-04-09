@@ -36,10 +36,10 @@ const CLASSIF_CONFIG: Record<
   LeadClassificacao,
   { label: string; color: string; bg: string; dot: string }
 > = {
-  excelente: { label: "Excelente", color: "#10b981", bg: "rgba(16,185,129,0.12)", dot: "#10b981" },
-  bom:       { label: "Bom",       color: "#60a5fa", bg: "rgba(96,165,250,0.12)", dot: "#60a5fa" },
-  fraco:     { label: "Fraco",     color: "#f59e0b", bg: "rgba(245,158,11,0.12)", dot: "#f59e0b" },
-  lixo:      { label: "Lixo",      color: "#ef4444", bg: "rgba(239,68,68,0.12)",  dot: "#ef4444" },
+  excelente: { label: "Excelente", color: "#009bc5", bg: "rgba(0,155,197,0.12)", dot: "#009bc5" },
+  bom:       { label: "Bom",       color: "#9e539b", bg: "rgba(158,83,155,0.12)", dot: "#9e539b" },
+  fraco:     { label: "Fraco",     color: "#f3e600", bg: "rgba(243,230,0,0.12)", dot: "#f3e600" },
+  lixo:      { label: "Lixo",      color: "#e6391e", bg: "rgba(230,57,30,0.12)",  dot: "#e6391e" },
   pendente:  { label: "Pendente",  color: "#6b7280", bg: "rgba(107,114,128,0.1)", dot: "#6b7280" },
 };
 
@@ -61,9 +61,9 @@ function ClassificacaoBadge({ value }: { value?: LeadClassificacao }) {
 function ScoreQualidade({ value }: { value?: number }) {
   if (value == null) return <span style={{ color: "var(--tm)" }}>—</span>;
   const color =
-    value >= 60 ? "#10b981" :
-    value >= 35 ? "#60a5fa" :
-    value >= 10 ? "#f59e0b" : "#ef4444";
+    value >= 60 ? "#009bc5" :
+    value >= 35 ? "#9e539b" :
+    value >= 10 ? "#f3e600" : "#e6391e";
   return (
     <span className="font-mono font-bold text-sm" style={{ color }}>
       {value}
@@ -77,8 +77,8 @@ function ScoreQualidade({ value }: { value?: number }) {
 function ConfiancaBadge({ value, label }: { value?: string; label: string }) {
   if (!value || value === "desconhecida") return null;
   const color =
-    value === "alta"  ? "#10b981" :
-    value === "media" ? "#f59e0b" : "#ef4444";
+    value === "alta"  ? "#009bc5" :
+    value === "media" ? "#f3e600" : "#e6391e";
   return (
     <span className="text-xs" style={{ color }}>
       {label} {value}
@@ -285,16 +285,17 @@ function LeadsPageInner() {
             {selected.size > 0 && (
               <button
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}
+                style={{ background: "rgba(230,57,30,0.1)", color: "#e6391e" }}
                 onClick={handleBulkDelete}
                 disabled={bulkDeleting}
+                aria-label={`Apagar ${selected.size} lead(s) seleccionado(s)`}
               >
                 {bulkDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 Apagar {selected.size} seleccionado{selected.size !== 1 ? "s" : ""}
               </button>
             )}
 
-            <button className="btn-secondary" onClick={() => setShowFilters((v) => !v)}>
+            <button className="btn-secondary" onClick={() => setShowFilters((v) => !v)} aria-label="Abrir e fechar painel de filtros">
               <SlidersHorizontal size={15} />
               Filtros
               {hasFilters && (
@@ -302,7 +303,7 @@ function LeadsPageInner() {
               )}
             </button>
 
-            <button className="btn-secondary" onClick={handleExport} disabled={exporting}>
+            <button className="btn-secondary" onClick={handleExport} disabled={exporting} aria-label="Exportar leads em CSV">
               {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
               Exportar CSV
             </button>
@@ -317,6 +318,7 @@ function LeadsPageInner() {
             placeholder="Pesquisar por nome, localidade, nicho..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            aria-label="Pesquisar leads por nome, localidade ou nicho"
           />
           {search && (
             <button className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setSearch("")}>
@@ -333,11 +335,13 @@ function LeadsPageInner() {
           >
             {/* Classificação — NOVO filtro mais importante */}
             <div>
-              <label className="label mb-1 block">Classificação</label>
+              <label htmlFor="classif-select" className="label mb-1 block">Classificação</label>
               <select
+                id="classif-select"
                 className="select"
                 value={classif}
                 onChange={(e) => { setClassif(e.target.value as LeadClassificacao | ""); setPage(1); }}
+                aria-label="Filtrar por classificação de lead"
               >
                 {CLASSIF_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -346,11 +350,13 @@ function LeadsPageInner() {
             </div>
 
             <div>
-              <label className="label mb-1 block">Status CRM</label>
+              <label htmlFor="status-select" className="label mb-1 block">Status CRM</label>
               <select
+                id="status-select"
                 className="select"
                 value={status}
                 onChange={(e) => { setStatus(e.target.value as CompanyStatus | ""); setPage(1); }}
+                aria-label="Filtrar por status do CRM"
               >
                 {STATUS_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -359,22 +365,26 @@ function LeadsPageInner() {
             </div>
 
             <div>
-              <label className="label mb-1 block">Nicho</label>
+              <label htmlFor="nicho-input" className="label mb-1 block">Nicho</label>
               <input
+                id="nicho-input"
                 className="input"
                 placeholder="Ex: Restaurantes"
                 value={nicho}
                 onChange={(e) => { setNicho(e.target.value); setPage(1); }}
+                aria-label="Filtrar por nicho de negócio"
               />
             </div>
 
             <div>
-              <label className="label mb-1 block">Localidade</label>
+              <label htmlFor="localidade-input" className="label mb-1 block">Localidade</label>
               <input
+                id="localidade-input"
                 className="input"
                 placeholder="Ex: Porto"
                 value={localidade}
                 onChange={(e) => { setLocalidade(e.target.value); setPage(1); }}
+                aria-label="Filtrar por localidade"
               />
             </div>
 
@@ -467,6 +477,8 @@ function LeadsPageInner() {
                   : { background: "var(--card)", color: "var(--ts)" }
               }
               onClick={() => toggleSort(opt.value)}
+              aria-label={`Ordenar por ${opt.label}${sortBy === opt.value ? ` (${sortDir === "desc" ? "descendente" : "ascendente"})` : ""}`}
+              aria-sort={sortBy === opt.value ? (sortDir === "desc" ? "descending" : "ascending") : "none"}
             >
               <ArrowUpDown size={11} />
               {opt.label}
@@ -495,10 +507,11 @@ function LeadsPageInner() {
             </p>
           </div>
         ) : (
-          <div className="card overflow-hidden">
+          <div className="card overflow-hidden" role="table" aria-label="Tabela de leads com filtros e ações">
             {/* Cabeçalho da tabela */}
             <div
               className="hidden md:grid grid-cols-12 gap-3 px-5 py-3 border-b text-xs uppercase tracking-wider"
+              role="row"
               style={{ borderColor: "var(--border)", color: "var(--tm)", background: "var(--card2)" }}
             >
               {/* Checkbox select-all */}
@@ -610,7 +623,7 @@ function LeadsPageInner() {
                     {lead.claimed_by && (
                       <span
                         className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded"
-                        style={{ background: "rgba(96,165,250,0.12)", color: "#60a5fa" }}
+                        style={{ background: "rgba(158,83,155,0.12)", color: "#9e539b" }}
                       >
                         <UserCheck size={10} />
                         {lead.claimed_by}

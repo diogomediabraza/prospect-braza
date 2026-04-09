@@ -14,9 +14,9 @@ export function ScoreBar({
   const pct = Math.min(100, (value / max) * 100);
   const getColor = () => {
     if (color) return color;
-    if (pct >= 70) return "#10b981";
-    if (pct >= 40) return "#f59e0b";
-    return "#f87171";
+    if (pct >= 70) return "#009bc5";
+    if (pct >= 40) return "#f3e600";
+    return "#e6391e";
   };
 
   return (
@@ -48,8 +48,8 @@ interface ScoreCircleProps {
 export function ScoreCircle({ value = 0, size = "md" }: ScoreCircleProps) {
   const pct = Math.min(100, (value / 10) * 100);
   const getColor = () => {
-    if (pct >= 70) return "#10b981";
-    if (pct >= 40) return "#f59e0b";
+    if (pct >= 70) return "#009bc5";
+    if (pct >= 40) return "#f3e600";
     return "var(--orange)";
   };
 

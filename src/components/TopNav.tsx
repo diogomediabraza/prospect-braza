@@ -135,6 +135,8 @@ export default function TopNav() {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-label={item.label}
+                aria-current={isActive ? "page" : undefined}
                 className={clsx(
                   "relative flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-150",
                   isActive

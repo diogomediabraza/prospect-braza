@@ -16,7 +16,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-PT">
+    <html lang="pt-PT" data-theme="dark">
       <body>
         <div className="flex flex-col min-h-screen">
           <TopNav />
