@@ -40,13 +40,49 @@ export default function TopNav() {
   const pathname = usePathname();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [mounted, setMounted] = useState(false);
+  const [isEmbedded, setIsEmbedded] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    const storedTheme = localStorage.getItem("theme") as "dark" | "light" | null;
-    const initialTheme = storedTheme || "dark";
+
+    // Detect if embedded in CRM (parent window !== self)
+    const embedded = typeof window !== "undefined" && window.parent !== window;
+    setIsEmbedded(embedded);
+
+    // Check for CRM theme URL parameter
+    const params = new URLSearchParams(window.location.search);
+    const crmTheme = params.get("crm_theme") as "dark" | "light" | null;
+
+    // Determine initial theme
+    let initialTheme: "dark" | "light";
+    if (crmTheme) {
+      initialTheme = crmTheme;
+    } else if (embedded) {
+      // Default to dark if embedded without explicit theme
+      initialTheme = "dark";
+    } else {
+      const storedTheme = localStorage.getItem("theme") as "dark" | "light" | null;
+      initialTheme = storedTheme || "dark";
+    }
+
     setTheme(initialTheme);
     document.documentElement.setAttribute("data-theme", initialTheme);
+
+    // Listen for postMessage from parent CRM window
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === "wb-theme-change" && e.data?.theme) {
+        const newTheme = e.data.theme as "dark" | "light";
+        setTheme(newTheme);
+        document.documentElement.setAttribute("data-theme", newTheme);
+        // Don't store in localStorage if controlled by parent
+        if (!embedded) {
+          localStorage.setItem("theme", newTheme);
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   const toggleTheme = () => {
@@ -133,8 +169,8 @@ export default function TopNav() {
           })}
         </nav>
 
-        {/* Theme Toggle */}
-        {mounted && (
+        {/* Theme Toggle — hidden when embedded in CRM */}
+        {mounted && !isEmbedded && (
           <button
             onClick={toggleTheme}
             className="btn-ghost"
