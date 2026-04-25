@@ -46,6 +46,26 @@ def build_filters(params):
     if params.get("sem_telefone") == "1":
         filters["telefone"] = "is.null"
 
+    # NEW: filter by claimed status
+    if params.get("claimed"):
+        val = params["claimed"]
+        if val == "unclaimed":
+            filters["claimed_by"] = "is.null"
+        elif val == "claimed":
+            filters["claimed_by"] = "not.is.null"
+
+    # NEW: filter by specific claimer
+    if params.get("claimed_by"):
+        filters["claimed_by"] = f"eq.{params['claimed_by']}"
+
+    # NEW: filter by CRM status (has crm_lead_id or not)
+    if params.get("in_crm"):
+        val = params["in_crm"]
+        if val == "1":
+            filters["crm_lead_id"] = "not.is.null"
+        elif val == "0":
+            filters["crm_lead_id"] = "is.null"
+
     return filters
 
 
@@ -86,7 +106,7 @@ class handler(BaseHTTPRequestHandler):
             order   = build_order(params)
 
             leads, total = sb_select_count(
-                "companies",
+                "prospect_companies",
                 filters=filters,
                 order=order,
                 limit=per_page,

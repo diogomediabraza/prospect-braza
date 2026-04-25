@@ -21,7 +21,8 @@ import {
   Layers,
 } from "lucide-react";
 import type { Company, CompanyStatus, LeadClassificacao, ConfiancaField } from "@/lib/types";
-import { updateLeadStatus, deleteLead } from "@/lib/api";
+import { updateLeadStatus, deleteLead, pushLeadToCrm } from "@/lib/api";
+import { Database, UserCheck, Youtube, Music2, Facebook, Copy, Check } from "lucide-react";
 import { CompanyStatusBadge } from "./StatusBadge";
 import { ScoreBar, ScoreCircle } from "./ScoreBars";
 import DigitalPresence from "./DigitalPresence";
@@ -48,10 +49,10 @@ const CLASSIF_CONFIG: Record<
   LeadClassificacao,
   { label: string; color: string; bg: string; emoji: string }
 > = {
-  excelente: { label: "Excelente", color: "#10b981", bg: "rgba(16,185,129,0.12)", emoji: "⭐" },
-  bom:       { label: "Bom",       color: "#60a5fa", bg: "rgba(96,165,250,0.12)", emoji: "✅" },
-  fraco:     { label: "Fraco",     color: "#f59e0b", bg: "rgba(245,158,11,0.12)", emoji: "⚠️" },
-  lixo:      { label: "Lixo",      color: "#ef4444", bg: "rgba(239,68,68,0.12)",  emoji: "🗑️" },
+  excelente: { label: "Excelente", color: "#009bc5", bg: "rgba(0,155,197,0.12)", emoji: "⭐" },
+  bom:       { label: "Bom",       color: "#9e539b", bg: "rgba(158,83,155,0.12)", emoji: "✅" },
+  fraco:     { label: "Fraco",     color: "#f3e600", bg: "rgba(243,230,0,0.12)", emoji: "⚠️" },
+  lixo:      { label: "Lixo",      color: "#e6391e", bg: "rgba(230,57,30,0.12)",  emoji: "🗑️" },
   pendente:  { label: "Pendente",  color: "#6b7280", bg: "rgba(107,114,128,0.1)", emoji: "⏳" },
 };
 
@@ -93,9 +94,9 @@ function ClassificacaoBlock({ value, score, motivo }: {
 
 function ConfiancaIcon({ value }: { value?: ConfiancaField }) {
   if (!value || value === "desconhecida") return null;
-  if (value === "alta")  return <ShieldCheck  size={13} style={{ color: "#10b981" }} aria-label="Confiança alta" />;
-  if (value === "media") return <ShieldAlert  size={13} style={{ color: "#f59e0b" }} aria-label="Confiança média" />;
-  return                        <AlertCircle  size={13} style={{ color: "#ef4444" }} aria-label="Confiança baixa" />;
+  if (value === "alta")  return <ShieldCheck  size={13} style={{ color: "#009bc5" }} aria-label="Confiança alta" />;
+  if (value === "media") return <ShieldAlert  size={13} style={{ color: "#f3e600" }} aria-label="Confiança média" />;
+  return                        <AlertCircle  size={13} style={{ color: "#e6391e" }} aria-label="Confiança baixa" />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,6 +108,9 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
   const [saving,         setSaving]         = useState(false);
   const [confirmDelete,  setConfirmDelete]  = useState(false);
   const [deleting,       setDeleting]       = useState(false);
+  const [pushingToCrm,   setPushingToCrm]   = useState(false);
+  const [crmPushed,       setCrmPushed]       = useState(!!company.crm_lead_id);
+  const [copied,          setCopied]          = useState<string | null>(null);
 
   // Fechar com Escape
   useEffect(() => {
@@ -126,6 +130,31 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePushToCrm = async () => {
+    setPushingToCrm(true);
+    try {
+      const result = await pushLeadToCrm(company.id);
+      if (result.ok) {
+        setCrmPushed(true);
+        // Update the parent list with the new crm_lead_id
+        onUpdate?.({ ...company, crm_lead_id: result.crm_lead_id, status: "abordado" });
+      } else {
+        alert(result.msg || "Erro ao inserir no CRM");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao inserir no CRM");
+    } finally {
+      setPushingToCrm(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 1500);
   };
 
   const handleDelete = async () => {
@@ -174,19 +203,31 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                   {company.localidade}
                 </span>
               )}
+              {company.claimed_by && (
+                <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(158,83,155,0.12)", color: "#9e539b" }}>
+                  <UserCheck size={10} />
+                  {company.claimed_by}
+                </span>
+              )}
+              {crmPushed && (
+                <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(0,155,197,0.12)", color: "#009bc5" }}>
+                  <Database size={10} />
+                  No CRM
+                </span>
+              )}
             </div>
           </div>
 
           <div className="flex items-center gap-2 ml-4 flex-shrink-0">
             {confirmDelete ? (
               <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: "#ef4444" }}>
+                <span className="text-xs" style={{ color: "#e6391e" }}>
                   <AlertTriangle size={12} className="inline mr-1" />
                   Apagar este lead?
                 </span>
                 <button
                   className="px-3 py-1 rounded-lg text-xs font-medium"
-                  style={{ background: "#ef4444", color: "#fff" }}
+                  style={{ background: "#e6391e", color: "#fff" }}
                   onClick={handleDelete}
                   disabled={deleting}
                 >
@@ -206,7 +247,7 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
                 onClick={handleDelete}
                 title="Apagar lead"
                 style={{ color: "var(--tm)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#e6391e")}
                 onMouseLeave={(e) => (e.currentTarget.style.color = "var(--tm)")}
               >
                 <Trash2 size={16} />
@@ -239,89 +280,140 @@ export default function LeadModal({ company, onClose, onUpdate, onDelete }: Lead
             </div>
             <div className="flex-1 space-y-2">
               <ScoreBar label="Maturidade Digital" value={company.score_maturidade_digital} />
-              <ScoreBar label="Oportunidade" value={company.score_oportunidade_comercial} color="#f59e0b" />
+              <ScoreBar label="Oportunidade" value={company.score_oportunidade_comercial} color="#f3e600" />
               <ScoreBar label="Prioridade SDR" value={company.score_prioridade_sdr} color="var(--orange)" />
             </div>
           </div>
 
-          {/* ── Contactos ── */}
-          <div className="grid grid-cols-2 gap-3">
-            {company.telefone && (
-              <a
-                href={`tel:${company.telefone}`}
-                className="flex items-center gap-2.5 p-3 rounded-lg"
-                style={{ background: "var(--bg3)" }}
-              >
-                <Phone size={15} style={{ color: "var(--orange)" }} />
-                <span className="text-sm flex-1" style={{ color: "var(--text)" }}>{company.telefone}</span>
-                <ConfiancaIcon value={company.confianca_telefone} />
-              </a>
-            )}
-            {company.email && (
-              <a
-                href={`mailto:${company.email}`}
-                className="flex items-center gap-2.5 p-3 rounded-lg"
-                style={{ background: "var(--bg3)" }}
-              >
-                <Mail size={15} style={{ color: "var(--orange)" }} />
-                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>{company.email}</span>
-                <ConfiancaIcon value={company.confianca_email} />
-              </a>
-            )}
-            {company.website && (
-              <a
-                href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2.5 p-3 rounded-lg col-span-2"
-                style={{ background: "var(--bg3)" }}
-              >
-                <Globe size={15} style={{ color: "var(--orange)" }} />
-                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>{company.website}</span>
-                <ExternalLink size={12} style={{ color: "var(--tm)" }} />
-              </a>
-            )}
-            {company.instagram && (
-              <a
-                href={company.instagram.startsWith("http") ? company.instagram : `https://instagram.com/${company.instagram.replace(/^@/, "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2.5 p-3 rounded-lg"
-                style={{ background: "var(--bg3)" }}
-              >
-                <Instagram size={15} style={{ color: "#e1306c" }} />
-                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>
-                  {company.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//, "@")}
-                </span>
-                <ExternalLink size={12} style={{ color: "var(--tm)" }} />
-              </a>
-            )}
-            {company.linkedin && (
-              <a
-                href={company.linkedin.startsWith("http") ? company.linkedin : `https://linkedin.com/company/${company.linkedin}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2.5 p-3 rounded-lg"
-                style={{ background: "var(--bg3)" }}
-              >
-                <Linkedin size={15} style={{ color: "#0077b5" }} />
-                <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>LinkedIn</span>
-                <ExternalLink size={12} style={{ color: "var(--tm)" }} />
-              </a>
-            )}
-            {company.morada && (
-              <div
-                className="flex items-start gap-2.5 p-3 rounded-lg col-span-2"
-                style={{ background: "var(--bg3)" }}
-              >
-                <MapPin size={15} className="flex-shrink-0 mt-0.5" style={{ color: "var(--tm)" }} />
-                <span className="text-sm" style={{ color: "var(--text)" }}>
-                  {company.morada}
-                  {company.codigo_postal ? `, ${company.codigo_postal}` : ""}
-                </span>
-              </div>
-            )}
+          {/* ── Inserir no CRM ── */}
+          {!crmPushed && (
+            <button
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-sm transition-all"
+              style={{ background: "var(--od)", color: "var(--ol)" }}
+              onClick={handlePushToCrm}
+              disabled={pushingToCrm}
+            >
+              {pushingToCrm ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}
+              Inserir contacto no CRM
+            </button>
+          )}
+
+          {/* ── Contactos — todos os dados visíveis ── */}
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: "var(--tm)" }}>
+              Dados de Contacto
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {company.telefone && (
+                <div className="flex items-center gap-2.5 p-3 rounded-lg group" style={{ background: "var(--bg3)" }}>
+                  <Phone size={14} style={{ color: "var(--orange)" }} />
+                  <a href={`tel:${company.telefone}`} className="text-sm flex-1" style={{ color: "var(--text)" }}>{company.telefone}</a>
+                  <ConfiancaIcon value={company.confianca_telefone} />
+                  <button className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => copyToClipboard(company.telefone!, "tel")} title="Copiar">
+                    {copied === "tel" ? <Check size={12} style={{ color: "#009bc5" }} /> : <Copy size={12} style={{ color: "var(--tm)" }} />}
+                  </button>
+                </div>
+              )}
+              {company.telefone2 && (
+                <div className="flex items-center gap-2.5 p-3 rounded-lg group" style={{ background: "var(--bg3)" }}>
+                  <Phone size={14} style={{ color: "var(--tm)" }} />
+                  <span className="text-sm flex-1" style={{ color: "var(--text)" }}>{company.telefone2}</span>
+                  <button className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => copyToClipboard(company.telefone2!, "tel2")} title="Copiar">
+                    {copied === "tel2" ? <Check size={12} style={{ color: "#009bc5" }} /> : <Copy size={12} style={{ color: "var(--tm)" }} />}
+                  </button>
+                </div>
+              )}
+              {company.email && (
+                <div className="flex items-center gap-2.5 p-3 rounded-lg group" style={{ background: "var(--bg3)" }}>
+                  <Mail size={14} style={{ color: "var(--orange)" }} />
+                  <a href={`mailto:${company.email}`} className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>{company.email}</a>
+                  <ConfiancaIcon value={company.confianca_email} />
+                  <button className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => copyToClipboard(company.email!, "email")} title="Copiar">
+                    {copied === "email" ? <Check size={12} style={{ color: "#009bc5" }} /> : <Copy size={12} style={{ color: "var(--tm)" }} />}
+                  </button>
+                </div>
+              )}
+              {company.website && (
+                <a
+                  href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2.5 p-3 rounded-lg"
+                  style={{ background: "var(--bg3)" }}
+                >
+                  <Globe size={14} style={{ color: "var(--orange)" }} />
+                  <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>{company.website.replace(/^https?:\/\/(www\.)?/, "")}</span>
+                  <ExternalLink size={12} style={{ color: "var(--tm)" }} />
+                </a>
+              )}
+            </div>
           </div>
+
+          {/* ── Redes Sociais — todos os canais ── */}
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: "var(--tm)" }}>
+              Redes Sociais
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {company.instagram && (
+                <a href={company.instagram.startsWith("http") ? company.instagram : `https://instagram.com/${company.instagram.replace(/^@/, "")}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2.5 p-3 rounded-lg" style={{ background: "var(--bg3)" }}>
+                  <Instagram size={14} style={{ color: "#e1306c" }} />
+                  <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>
+                    {company.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//, "@")}
+                  </span>
+                  <ExternalLink size={12} style={{ color: "var(--tm)" }} />
+                </a>
+              )}
+              {company.facebook && (
+                <a href={company.facebook.startsWith("http") ? company.facebook : `https://facebook.com/${company.facebook}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2.5 p-3 rounded-lg" style={{ background: "var(--bg3)" }}>
+                  <Facebook size={14} style={{ color: "#1877f2" }} />
+                  <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>Facebook</span>
+                  <ExternalLink size={12} style={{ color: "var(--tm)" }} />
+                </a>
+              )}
+              {company.linkedin && (
+                <a href={company.linkedin.startsWith("http") ? company.linkedin : `https://linkedin.com/company/${company.linkedin}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2.5 p-3 rounded-lg" style={{ background: "var(--bg3)" }}>
+                  <Linkedin size={14} style={{ color: "#0077b5" }} />
+                  <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>LinkedIn</span>
+                  <ExternalLink size={12} style={{ color: "var(--tm)" }} />
+                </a>
+              )}
+              {company.youtube && (
+                <a href={company.youtube} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2.5 p-3 rounded-lg" style={{ background: "var(--bg3)" }}>
+                  <Youtube size={14} style={{ color: "#ff0000" }} />
+                  <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>YouTube</span>
+                  <ExternalLink size={12} style={{ color: "var(--tm)" }} />
+                </a>
+              )}
+              {company.tiktok && (
+                <a href={company.tiktok} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2.5 p-3 rounded-lg" style={{ background: "var(--bg3)" }}>
+                  <Music2 size={14} style={{ color: "var(--text)" }} />
+                  <span className="text-sm truncate flex-1" style={{ color: "var(--text)" }}>TikTok</span>
+                  <ExternalLink size={12} style={{ color: "var(--tm)" }} />
+                </a>
+              )}
+              {!company.instagram && !company.facebook && !company.linkedin && !company.youtube && !company.tiktok && (
+                <span className="col-span-2 text-xs p-3" style={{ color: "var(--tm)" }}>Nenhuma rede social encontrada</span>
+              )}
+            </div>
+          </div>
+
+          {/* ── Morada ── */}
+          {company.morada && (
+            <div className="flex items-start gap-2.5 p-3 rounded-lg" style={{ background: "var(--bg3)" }}>
+              <MapPin size={14} className="flex-shrink-0 mt-0.5" style={{ color: "var(--tm)" }} />
+              <span className="text-sm" style={{ color: "var(--text)" }}>
+                {company.morada}
+                {company.codigo_postal ? `, ${company.codigo_postal}` : ""}
+                {company.pais ? ` — ${company.pais}` : ""}
+              </span>
+            </div>
+          )}
 
           {/* ── Presença digital ── */}
           <DigitalPresence company={company} />

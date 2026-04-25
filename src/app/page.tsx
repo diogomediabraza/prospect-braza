@@ -217,7 +217,7 @@ export default function Dashboard() {
             </h2>
           </div>
 
-          <form onSubmit={handleSearch} className="space-y-4">
+          <form onSubmit={handleSearch} className="space-y-4" role="form">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Nicho */}
               <div>
@@ -232,6 +232,7 @@ export default function Dashboard() {
                     placeholder="Ex: Restaurantes, Clínicas..."
                     value={nicho}
                     onChange={(e) => setNicho(e.target.value)}
+                    aria-label="Nicho ou sector de negócio"
                   />
                   <datalist id="nichos-list">
                     {NICHOS.map((n) => (
@@ -253,6 +254,7 @@ export default function Dashboard() {
                   placeholder="Ex: Porto, Lisboa..."
                   value={localidade}
                   onChange={(e) => setLocalidade(e.target.value)}
+                  aria-label="Localidade ou cidade"
                 />
                 <datalist id="localidades-list">
                   {LOCALIDADES.map((l) => (
@@ -271,6 +273,7 @@ export default function Dashboard() {
                   className="select"
                   value={maxResultados}
                   onChange={(e) => setMaxResultados(Number(e.target.value))}
+                  aria-label="Número máximo de resultados"
                 >
                   <option value={20}>20 empresas</option>
                   <option value={50}>50 empresas</option>
@@ -281,7 +284,7 @@ export default function Dashboard() {
             </div>
 
             {error && (
-              <p className="text-sm" style={{ color: "#f87171" }}>
+              <p className="text-sm" style={{ color: "#e6391e" }}>
                 {error}
               </p>
             )}
@@ -290,18 +293,20 @@ export default function Dashboard() {
             {jobCreated && (
               <div
                 className="flex items-center justify-between p-4 rounded-xl border"
+                aria-live="polite"
+                aria-label="Pesquisa iniciada com sucesso"
                 style={{
-                  background: "rgba(16,185,129,0.08)",
-                  borderColor: "rgba(16,185,129,0.2)",
+                  background: "rgba(0,155,197,0.08)",
+                  borderColor: "rgba(0,155,197,0.2)",
                 }}
               >
                 <div className="flex items-center gap-3">
                   <div
                     className="w-2 h-2 rounded-full animate-pulse"
-                    style={{ background: "#10b981" }}
+                    style={{ background: "#009bc5" }}
                   />
                   <div>
-                    <div className="text-sm font-medium" style={{ color: "#10b981" }}>
+                    <div className="text-sm font-medium" style={{ color: "#009bc5" }}>
                       Pesquisa iniciada!
                     </div>
                     <div className="text-xs" style={{ color: "var(--ts)" }}>
@@ -312,7 +317,7 @@ export default function Dashboard() {
                 <Link
                   href={`/jobs`}
                   className="flex items-center gap-1 text-xs"
-                  style={{ color: "#10b981" }}
+                  style={{ color: "#009bc5" }}
                 >
                   Ver Jobs
                   <ArrowRight size={12} />
@@ -328,6 +333,7 @@ export default function Dashboard() {
                 type="submit"
                 className="btn-primary"
                 disabled={loading}
+                aria-label="Iniciar pesquisa de prospectos"
               >
                 {loading ? (
                   <>
@@ -488,6 +494,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Link
             href="/leads"
+            aria-label="Ir para base de leads"
             className="card-hover p-5 flex items-center gap-4 group cursor-pointer"
           >
             <div
@@ -513,13 +520,14 @@ export default function Dashboard() {
 
           <Link
             href="/export"
+            aria-label="Ir para exportar dados em CSV"
             className="card-hover p-5 flex items-center gap-4 group cursor-pointer"
           >
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{ background: "rgba(59,130,246,0.1)" }}
+              style={{ background: "rgba(158,83,155,0.1)" }}
             >
-              <TrendingUp size={20} style={{ color: "#60a5fa" }} />
+              <TrendingUp size={20} style={{ color: "#9e539b" }} />
             </div>
             <div className="flex-1">
               <div className="font-medium" style={{ color: "var(--text)" }}>

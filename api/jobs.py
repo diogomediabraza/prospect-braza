@@ -187,7 +187,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
 
     try:
         t_start = time.time()   # relógio de parede — controla o orçamento
-        sb_update("jobs", {"id": f"eq.{job_id}"}, {"status": "a_correr", "progresso": 0})
+        sb_update("prospect_jobs", {"id": f"eq.{job_id}"}, {"status": "a_correr", "progresso": 0})
 
         # ── ETAPA 1: Descoberta ───────────────────────────────────────────────
         # Busca 4× mais candidatos para garantir leads de qualidade suficientes
@@ -201,7 +201,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
         # ── Deduplicação: remove empresas já na base de dados ─────────────────
         try:
             existentes = sb_select(
-                "companies",
+                "prospect_companies",
                 filters={"nicho": f"eq.{nicho}", "localidade": f"ilike.{localidade}%"},
                 select="nome",
                 limit=2000,
@@ -222,7 +222,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
         log(f"[JOB {job_id[:8]}] {total} candidatos novos para enriquecer e classificar")
 
         if total == 0:
-            sb_update("jobs", {"id": f"eq.{job_id}"},
+            sb_update("prospect_jobs", {"id": f"eq.{job_id}"},
                       {"status": "concluido", "progresso": 100,
                        "total_encontrados": 0, "total_validos": 0,
                        "total_descartados": 0,
@@ -230,7 +230,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                        "data_fim": datetime.now(timezone.utc).isoformat()})
             return
 
-        sb_update("jobs", {"id": f"eq.{job_id}"}, {"progresso": 10})
+        sb_update("prospect_jobs", {"id": f"eq.{job_id}"}, {"progresso": 10})
 
         # ── ETAPAS 2+3 unificadas: enriquecer → classificar → inserir de imediato ──
         # Cada empresa é inserida assim que fica pronta, sem esperar pelas outras.
@@ -323,7 +323,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                 "status":                       "novo",
                 "fonte":                        fonte,
             }
-            sb_insert("companies", row, on_conflict="nome,localidade", ignore_duplicates=True)
+            sb_insert("prospect_companies", row, on_conflict="nome,localidade", ignore_duplicates=True)
             inserted += 1
             return True
 
@@ -350,14 +350,14 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                         log(f"[ERRO] {company.get('nome','?')}: {ex}")
                     done += 1
                     progress = 10 + int((done / max(len(future_to_company), 1)) * 85)
-                    sb_update("jobs", {"id": f"eq.{job_id}"},
+                    sb_update("prospect_jobs", {"id": f"eq.{job_id}"},
                               {"progresso": progress, "total_validos": inserted})
             except Exception:
                 log(f"[JOB {job_id[:8]}] Timeout — {done} processados, {inserted} inseridos")
 
         log(f"[JOB {job_id[:8]}] Concluído: {inserted} válidos, {descartados} descartados")
 
-        sb_update("jobs", {"id": f"eq.{job_id}"},
+        sb_update("prospect_jobs", {"id": f"eq.{job_id}"},
                   {"status": "concluido", "progresso": 100,
                    "total_encontrados": inserted + descartados,
                    "total_validos":     inserted,        # NOVO
@@ -366,7 +366,7 @@ def run_scraping_job(job_id: str, nicho: str, localidade: str, max_results: int)
                    "data_fim":          datetime.now(timezone.utc).isoformat()})
 
     except Exception as e:
-        sb_update("jobs", {"id": f"eq.{job_id}"},
+        sb_update("prospect_jobs", {"id": f"eq.{job_id}"},
                   {"status": "erro",
                    "mensagem_erro": str(e)[:500],
                    "logs_resumidos": json.dumps(logs[-20:]),
@@ -383,7 +383,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            jobs = sb_select("jobs", order="data_inicio.desc", limit=100)
+            jobs = sb_select("prospect_jobs", order="data_inicio.desc", limit=100)
             status, headers, body = json_response(jobs)
         except Exception as e:
             status, headers, body = error_response(str(e), 500)
@@ -404,7 +404,7 @@ class handler(BaseHTTPRequestHandler):
 
             job_id = str(uuid.uuid4())
 
-            sb_insert("jobs", {
+            sb_insert("prospect_jobs", {
                 "id":              job_id,
                 "nicho":           nicho,
                 "localidade":      localidade,
@@ -418,7 +418,7 @@ class handler(BaseHTTPRequestHandler):
 
             run_scraping_job(job_id, nicho, localidade, max_resultados)
 
-            updated = sb_select("jobs", filters={"id": f"eq.{job_id}"}, limit=1)
+            updated = sb_select("prospect_jobs", filters={"id": f"eq.{job_id}"}, limit=1)
             job     = updated[0] if updated else {"id": job_id, "status": "concluido"}
             status, headers, body = json_response(job, 201)
         except Exception as e:

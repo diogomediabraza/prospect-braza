@@ -29,7 +29,7 @@ export default function DigitalPresence({ company, compact }: DigitalPresencePro
     const count = active.length;
     const total = PRESENCE_ICONS.length;
     const pct = (count / total) * 100;
-    const color = pct >= 66 ? "#10b981" : pct >= 33 ? "#f59e0b" : "#f87171";
+    const color = pct >= 66 ? "#009bc5" : pct >= 33 ? "#f3e600" : "#e6391e";
 
     return (
       <div className="flex items-center gap-1.5">
@@ -85,9 +85,9 @@ export default function DigitalPresence({ company, compact }: DigitalPresencePro
                 key={key}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
                 style={{
-                  background: isActive ? "rgba(59,130,246,0.1)" : "var(--bg3)",
-                  color: isActive ? "#60a5fa" : "var(--tm)",
-                  border: `1px solid ${isActive ? "rgba(59,130,246,0.2)" : "var(--border)"}`,
+                  background: isActive ? "rgba(158,83,155,0.1)" : "var(--bg3)",
+                  color: isActive ? "#9e539b" : "var(--tm)",
+                  border: `1px solid ${isActive ? "rgba(158,83,155,0.2)" : "var(--border)"}`,
                 }}
               >
                 <Icon size={12} />

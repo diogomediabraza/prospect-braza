@@ -86,7 +86,7 @@ class handler(BaseHTTPRequestHandler):
                 filters["classificacao_lead"] = "neq.lixo"
 
             rows = sb_select(
-                "companies",
+                "prospect_companies",
                 filters=filters if filters else None,
                 order="score_qualidade_lead.desc.nullslast",
                 limit=5000,

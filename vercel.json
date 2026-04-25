@@ -3,20 +3,42 @@
   "outputDirectory": ".next",
   "framework": "nextjs",
   "functions": {
-    "api/leads.py": { "maxDuration": 30 },
-    "api/jobs.py": { "maxDuration": 60 },
-    "api/stats.py": { "maxDuration": 30 },
-    "api/purge.py": { "maxDuration": 30 },
-    "api/leads/export.py": { "maxDuration": 30 },
-    "api/leads/[id].py": { "maxDuration": 30 },
-    "api/jobs/[id].py": { "maxDuration": 30 },
-    "api/jobs/[id]/cancel.py": { "maxDuration": 30 },
-    "api/purge.py": { "maxDuration": 30 }
+    "api/leads.py": {
+      "maxDuration": 30
+    },
+    "api/jobs.py": {
+      "maxDuration": 60
+    },
+    "api/stats.py": {
+      "maxDuration": 30
+    },
+    "api/purge.py": {
+      "maxDuration": 30
+    },
+    "api/leads/export.py": {
+      "maxDuration": 30
+    },
+    "api/leads/to-crm.py": {
+      "maxDuration": 30
+    },
+    "api/leads/[id].py": {
+      "maxDuration": 30
+    },
+    "api/jobs/[id].py": {
+      "maxDuration": 30
+    },
+    "api/jobs/[id]/cancel.py": {
+      "maxDuration": 30
+    }
   },
   "rewrites": [
     {
       "source": "/api/leads/export",
       "destination": "/api/leads/export"
+    },
+    {
+      "source": "/api/leads/to-crm",
+      "destination": "/api/leads/to-crm"
     },
     {
       "source": "/api/leads/:id/cancel",
@@ -37,11 +59,33 @@
   ],
   "headers": [
     {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors *"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "ALLOWALL"
+        }
+      ]
+    },
+    {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, PATCH, DELETE, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        }
       ]
     }
   ]

@@ -32,7 +32,7 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         job_id = _get_job_id(self.path)
         try:
-            job = sb_select_one("jobs", filters={"id": f"eq.{job_id}"})
+            job = sb_select_one("prospect_jobs", filters={"id": f"eq.{job_id}"})
             if not job:
                 status, headers, body = error_response("Job não encontrado", 404)
             else:
@@ -44,7 +44,7 @@ class handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         job_id = _get_job_id(self.path)
         try:
-            job = sb_select_one("jobs", filters={"id": f"eq.{job_id}"})
+            job = sb_select_one("prospect_jobs", filters={"id": f"eq.{job_id}"})
             if not job:
                 status, headers, body = error_response("Job não encontrado", 404)
                 send_response(self, status, headers, body)
@@ -55,14 +55,14 @@ class handler(BaseHTTPRequestHandler):
             # sem afectar leads de outros jobs com o mesmo nicho+localidade.
             deleted_leads = 0
             try:
-                result = sb_delete("companies", {"job_id": f"eq.{job_id}"})
+                result = sb_delete("prospect_companies", {"job_id": f"eq.{job_id}"})
                 if isinstance(result, list):
                     deleted_leads = len(result)
             except Exception as e:
                 # Não é fatal — o job é apagado mesmo se os leads ficarem
                 print(f"[DELETE JOB] Aviso: falha ao apagar leads do job {job_id}: {e}", flush=True)
 
-            sb_delete("jobs", {"id": f"eq.{job_id}"})
+            sb_delete("prospect_jobs", {"id": f"eq.{job_id}"})
             status, headers, body = json_response({
                 "deleted": True,
                 "id": job_id,
