@@ -633,7 +633,7 @@ function LeadsPageInner() {
                     <div className="flex items-center gap-2 font-medium text-sm" style={{ color: "var(--text)" }}>
                       <span className="truncate">{lead.nome}</span>
                       {!lead.telefone && !lead.email && !lead.website && (
-                        <AlertCircle size={13} style={{ color: "#f3e600", flexShrink: 0 }} title="Lead incompleto: faltam dados de contacto" />
+                        <AlertCircle size={13} style={{ color: "#f3e600", flexShrink: 0 }} />
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
